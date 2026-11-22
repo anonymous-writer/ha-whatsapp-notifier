@@ -33,7 +33,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/anonymouse-labs/ha-whatsapp-notifier/whatsapp-bridge
+          images: ghcr.io/${{ github.repository_owner }}/ha-whatsapp-notifier
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
