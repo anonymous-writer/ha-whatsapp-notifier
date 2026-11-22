@@ -10,6 +10,14 @@
 
 </div>
 
+## Go bridge 0.5.1
+
+The linked-device identity is configured as **Home Assistant** with the
+WhatsApp desktop companion platform. WhatsApp controls the icon shown in its
+Linked devices screen; custom icons cannot be uploaded through whatsmeow.
+After updating, unlink the old companion device in WhatsApp and pair the bridge
+again so the new identity is registered.
+
 ## Nederlands
 
 Stuur WhatsApp-berichten vanuit Home Assistant naar een persoon of groep, en reageer op antwoorden, **zonder externe server of abonnement**. Alles draait op je eigen Home Assistant.

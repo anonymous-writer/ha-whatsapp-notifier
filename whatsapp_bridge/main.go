@@ -23,7 +23,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	qrcode "github.com/skip2/go-qrcode"
 	"go.mau.fi/whatsmeow"
+	waCompanionReg "go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -269,6 +271,11 @@ func (b *bridge) startWhatsApp(authDir string) error {
 		device = container.NewDevice()
 	}
 
+	// Customize the companion-device identity shown in WhatsApp's
+	// Linked devices screen. WhatsApp controls the actual device icon.
+	store.DeviceProps.Os = proto.String("Home Assistant")
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
+
 	client := whatsmeow.NewClient(device, nil)
 	b.setClient(client)
 	b.registerEventHandler(client)
@@ -401,7 +408,7 @@ func (b *bridge) handleWhatsAppEvent(raw any) {
 				client := b.getClient()
 				go func() {
 					// PairPhone must be called after the QR event has been received.
-					code, err := client.PairPhone(context.Background(), b.pairPhone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+					code, err := client.PairPhone(context.Background(), b.pairPhone, true, whatsmeow.PairClientChrome, "Home Assistant")
 					if err != nil {
 						b.setStatus("error", "", err.Error())
 						log.Printf("phone pairing failed: %v", err)

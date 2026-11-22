@@ -1,5 +1,5 @@
 name: WhatsApp Bridge
-version: "0.5.0"
+version: "0.5.1"
 slug: whatsapp_bridge
 image: ghcr.io/anonymous-writer/ha-whatsapp-notifier
 description: Self-hosted WhatsApp bridge (linked device) for the WhatsApp Notifier integration
