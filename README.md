@@ -4,7 +4,7 @@
 
 # WhatsApp Notifier
 
-[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=anonymouse-labs&repository=ha-whatsapp-notifier&category=integration) [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/anonymouse0501)
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=anonymous-writer&repository=ha-whatsapp-notifier&category=integration) [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/anonymouse0501)
 
 [Nederlands](#nederlands) | [English](#english)
 
@@ -23,12 +23,12 @@ Stuur WhatsApp-berichten vanuit Home Assistant naar een persoon of groep, en rea
 
 Het bestaat uit twee delen:
 
-1. **Bridge-app** (`whatsapp_bridge/`, vóór Home Assistant 2026.2 een add-on genoemd): een kleine Node-service met [Baileys](https://github.com/WhiskeySockets/Baileys). Hij koppelt aan je WhatsApp-account als *gekoppeld apparaat* (zoals WhatsApp Web).
+1. **Bridge-app** (`whatsapp_bridge/`, vóór Home Assistant 2026.2 een add-on genoemd): een zelfstandige Go-service met [whatsmeow](https://github.com/tulir/whatsmeow). Hij koppelt aan je WhatsApp-account als *gekoppeld apparaat* (zoals WhatsApp Web).
 2. **Integratie** (`custom_components/whatsapp_notifier/`): een statussensor, een testknop, een `send_message`-service en **één apparaat per chat** met een eigen notify-entiteit en een sensor "Laatste bericht".
 
 Vereist Home Assistant 2025.3 of nieuwer.
 
-> **Disclaimer:** Baileys gebruikt het onofficiële WhatsApp Web-protocol. Dat is in strijd met de voorwaarden van WhatsApp en het account kan geblokkeerd worden. Gebruik een apart nummer, verstuur weinig berichten en spam nooit.
+> **Disclaimer:** whatsmeow gebruikt het onofficiële WhatsApp Web Multi-Device-protocol. WhatsApp kan dit protocol wijzigen en gebruik kan risico op accountbeperkingen opleveren. Gebruik een apart nummer, verstuur weinig berichten en spam nooit.
 
 ### Voorbeelden
 
@@ -42,9 +42,10 @@ Berichten die met deze integratie vanuit Home Assistant zijn verstuurd:
 
 De eerste twee vragen om een antwoord. Een antwoord op het bericht kan de herinnering stoppen, zie [Antwoorden](#antwoorden).
 
-De Bridge-Docker-image wordt bij het publiceren van een GitHub Release automatisch
-gebouwd en naar GitHub Container Registry gepusht (`ghcr.io/anonymouse-labs/ha-whatsapp-notifier/whatsapp-bridge`).
-De image bevat multi-arch builds voor `amd64` en `aarch64`.
+De Go-Bridge wordt bij het publiceren van een GitHub Release automatisch als multi-architectuur Docker-image gebouwd en naar GitHub Container Registry gepusht:
+
+- `ghcr.io/anonymous-writer/ha-whatsapp-notifier:latest`
+- Architecturen: `linux/amd64` en `linux/arm64` (Home Assistant `amd64` en `aarch64`).
 
 ### Installatie
 
@@ -52,19 +53,21 @@ De image bevat multi-arch builds voor `amd64` en `aarch64`.
 
 1. Klik op deze knop om de repository aan je Home Assistant toe te voegen en installeer daarna **WhatsApp Bridge**:
 
-   [![Open je Home Assistant en toon de dialoog om een app-repository toe te voegen.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fanonymouse-labs%2Fha-whatsapp-notifier)
+   [![Open je Home Assistant en toon de dialoog om een app-repository toe te voegen.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fanonymous-writer%2Fha-whatsapp-notifier)
 
-   Of voeg hem handmatig toe: HA > Instellingen > Apps, open de store, dan ⋮ > Repositories, en voeg `https://github.com/anonymouse-labs/ha-whatsapp-notifier` toe. (Vóór Home Assistant 2026.2 heette dit Instellingen > Add-ons.)
+   Of voeg hem handmatig toe: HA > Instellingen > Apps, open de store, dan ⋮ > Repositories, en voeg `https://github.com/anonymous-writer/ha-whatsapp-notifier` toe. (Vóór Home Assistant 2026.2 heette dit Instellingen > Add-ons.)
 2. Stel op het tabblad *Configuratie* in:
    - `api_token` (**verplicht**): verzin een lang wachtwoord. De bridge start niet zonder. Je hebt het hieronder opnieuw nodig.
    - `pairing_phone`: laat **leeg** om met een QR-code te koppelen (aanbevolen, zie hieronder).
 3. Sla op en start de app.
 
+> **Migratie vanaf Node/Baileys:** de oude Baileys-authenticatie kan niet door whatsmeow worden geïmporteerd. Bij de eerste start van de Go-Bridge moet je WhatsApp opnieuw koppelen. De nieuwe sessie wordt opgeslagen in `/data/auth/whatsapp.db`.
+
 #### 2. WhatsApp koppelen (QR-code)
 
 1. Open op een computer `http://homeassistant.local:8099/qr?token=<api_token>`. Je ziet een QR-code die elke 15 seconden ververst.
 2. Op de telefoon van het nummer dat de berichten gaat versturen: WhatsApp > Instellingen > Gekoppelde apparaten > Apparaat koppelen, en scan de QR-code.
-3. In het log van de app staat nu `status connected` (een `515` stream-fout direct na het koppelen is normaal). De sessie wordt bewaard in `/data` van de app, dus na een herstart hoef je niet opnieuw te koppelen.
+3. In het log van de app staat nu `status connected`. De sessie wordt als SQLite-database bewaard in `/data/auth/whatsapp.db`, dus na een herstart hoef je niet opnieuw te koppelen.
 
 Alternatief: vul je nummer in bij `pairing_phone` (internationaal, alleen cijfers, bijvoorbeeld `31612345678`), herstart de app en voer de code van 8 tekens uit het log in onder *Koppelen met telefoonnummer*. Dit werkte op sommige iPhones niet, dus geef de voorkeur aan de QR-code. Gebruik nooit beide tegelijk: maak `pairing_phone` leeg als je de QR-pagina gebruikt.
 
@@ -73,7 +76,7 @@ Alternatief: vul je nummer in bij `pairing_phone` (internationaal, alleen cijfer
 1. Installeer via HACS: ⋮ > Aangepaste repositories > de URL van deze repo, categorie *Integratie*. Herstart HA. (Of kopieer `custom_components/whatsapp_notifier` naar je config-map.)
 2. Instellingen > Apparaten en services > Integratie toevoegen > **WhatsApp Notifier**: host `homeassistant.local` (of het HA-adres), poort `8099`, je `api_token` en eventueel een **standaard chat-ID**. Wijzig de standaard later met de knop *Configureren* van de integratie.
 
-Geen apps (HA Container/Core)? Draai de bridge ergens anders: `cd whatsapp_bridge && npm ci && API_TOKEN=secret node index.js` en open daarna `/qr` zoals hierboven. Optionele omgevingsvariabelen: `PORT`, `PAIRING_PHONE`, `AUTH_DIR`.
+Geen apps (HA Container/Core)? Installeer Go 1.27+, ga naar `whatsapp_bridge` en start de bridge met `go mod download && API_TOKEN=secret go run .`. Open daarna `/qr` zoals hierboven. Optionele omgevingsvariabelen: `PORT`, `PAIRING_PHONE`, `AUTH_DIR` en `DATA_DIR`.
 
 ### Chat-ID's vinden
 
@@ -146,13 +149,13 @@ WhatsApp-opmaak werkt in de tekst: `*vet*`, `_cursief_`, `~doorgehaald~`.
 1. `Status` toont *Connected*.
 2. Druk op **Testbericht versturen** bij een chat-apparaat (gaat naar die chat) of bij het hoofdapparaat WhatsApp (gaat naar de standaard chat uit *Configureren*).
 3. Roep `whatsapp_notifier.send_message` aan in Ontwikkelaarstools > Acties met een `chat_id`.
-4. Gaat er iets mis, bekijk dan het log van de app en de sensor *Status* (`pairing_required` of `logged_out` betekent: opnieuw koppelen via `/qr`).
+4. Gaat er iets mis, bekijk dan het log van de app en de sensor *Status* (`pairing_required` betekent: koppelen via `/qr`; na `logged_out` maakt de bridge automatisch een nieuwe sessie aan en verschijnt opnieuw een QR-code).
 
 ### Antwoorden
 
 Schrijft iemand in een chat die je hebt toegevoegd, dan wordt de sensor **Laatste bericht** van die chat bijgewerkt en komt het event `whatsapp_notifier_message_received` met dezelfde velden als de sensorattributen.
 
-**Een afbeelding versturen:** geef `whatsapp_notifier.send_message` een `image` (pad naar een PNG of JPEG, max. 5 MB). Het `message` wordt het onderschrift. Het bestand moet in een map staan die Home Assistant toestaat, zoals `/config/www` (of een map uit `allowlist_external_dirs`). Dit vereist bridge-add-on 0.3.0 of nieuwer.
+**Een afbeelding versturen:** geef `whatsapp_notifier.send_message` een `image` (pad naar een PNG of JPEG, max. 5 MB). Het `message` wordt het onderschrift. Het bestand moet in een map staan die Home Assistant toestaat, zoals `/config/www` (of een map uit `allowlist_external_dirs`). Dit vereist Go-Bridge 0.4.0 of nieuwer.
 
 ```yaml
 action: whatsapp_notifier.send_message
@@ -298,12 +301,12 @@ Send WhatsApp messages from Home Assistant to a person or a group, and react to 
 
 It has two parts:
 
-1. **Bridge app** (`whatsapp_bridge/`, called an add-on before Home Assistant 2026.2): a small Node service using [Baileys](https://github.com/WhiskeySockets/Baileys). It links to your WhatsApp account as a *linked device* (like WhatsApp Web).
+1. **Bridge app** (`whatsapp_bridge/`, called an add-on before Home Assistant 2026.2): a standalone Go service using [whatsmeow](https://github.com/tulir/whatsmeow). It links to your WhatsApp account as a *linked device* (like WhatsApp Web).
 2. **Integration** (`custom_components/whatsapp_notifier/`): a status sensor, a test button, a `send_message` service, and **one device per chat** with its own notify entity and "Last message" sensor.
 
 Needs Home Assistant 2025.3 or newer.
 
-> **Disclaimer:** Baileys uses the unofficial WhatsApp Web protocol. This is against WhatsApp's terms and the account can be banned. Use a dedicated number, send low volumes, never spam.
+> **Disclaimer:** whatsmeow uses the unofficial WhatsApp Web Multi-Device protocol. WhatsApp may change this protocol and use may put the account at risk of restrictions. Use a dedicated number, send low volumes, never spam.
 
 ### Examples
 
@@ -323,19 +326,21 @@ The first two ask for a reply. A reply to the message can stop the reminder, see
 
 1. Click this button to add the repository to your Home Assistant, then install **WhatsApp Bridge**:
 
-   [![Open your Home Assistant instance and show the add app repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fanonymouse-labs%2Fha-whatsapp-notifier)
+   [![Open your Home Assistant instance and show the add app repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fanonymous-writer%2Fha-whatsapp-notifier)
 
-   Or add it by hand: HA > Settings > Apps, open the store, then ⋮ > Repositories, and add `https://github.com/anonymouse-labs/ha-whatsapp-notifier`. (Before Home Assistant 2026.2 this was Settings > Add-ons.)
+   Or add it by hand: HA > Settings > Apps, open the store, then ⋮ > Repositories, and add `https://github.com/anonymous-writer/ha-whatsapp-notifier`. (Before Home Assistant 2026.2 this was Settings > Add-ons.)
 2. On the *Configuration* tab set:
    - `api_token` (**required**): make up a long password. The bridge refuses to start without one. You need it again below.
    - `pairing_phone`: leave **empty** to link with a QR code (recommended, see below).
 3. Save and start the app.
 
+> **Migration from Node/Baileys:** the old Baileys authentication cannot be imported by whatsmeow. You must pair WhatsApp again the first time the Go bridge starts. The new session is stored in `/data/auth/whatsapp.db`.
+
 #### 2. Link your WhatsApp (QR code)
 
 1. Open `http://homeassistant.local:8099/qr?token=<api_token>` on a computer. You see a QR code that refreshes every 15 seconds.
 2. On the phone of the number that will send the messages: WhatsApp > Settings > Linked devices > Link a device, and scan the QR code.
-3. The app log now shows `status connected` (a `515` stream error right after linking is normal). The session is stored in the app's `/data`, so restarts need no new pairing.
+3. The app log now shows `status connected`. The session is stored as a SQLite database at `/data/auth/whatsapp.db`, so restarts need no new pairing.
 
 Alternative: put your number in `pairing_phone` (international, digits only, e.g. `31612345678`), restart the app and enter the 8-character code from the log under *Link with phone number instead*. This has failed on some iPhones, so prefer the QR code. Never use both at once: clear `pairing_phone` when you use the QR page.
 
@@ -344,7 +349,7 @@ Alternative: put your number in `pairing_phone` (international, digits only, e.g
 1. Install via HACS: ⋮ > Custom repositories > this repo's URL, category *Integration*. Restart HA. (Or copy `custom_components/whatsapp_notifier` into your config folder.)
 2. Settings > Devices > Add integration > **WhatsApp Notifier**: host `homeassistant.local` (or the HA address), port `8099`, your `api_token` and optionally a **default chat ID**. Change the default later with the integration's *Configure* button.
 
-No apps (HA Container/Core)? Run the bridge anywhere: `cd whatsapp_bridge && npm ci && API_TOKEN=secret node index.js`, then open `/qr` as above. Optional env vars: `PORT`, `PAIRING_PHONE`, `AUTH_DIR`.
+No apps (HA Container/Core)? Install Go 1.27+, enter `whatsapp_bridge` and run `go mod download && API_TOKEN=secret go run .`, then open `/qr` as above. Optional environment variables: `PORT`, `PAIRING_PHONE`, `AUTH_DIR` and `DATA_DIR`.
 
 ### Finding chat IDs
 
@@ -417,13 +422,13 @@ WhatsApp formatting works in the text: `*bold*`, `_italic_`, `~strike~`.
 1. `Status` shows *Connected*.
 2. Press **Send test message** on a chat device (it goes to that chat), or on the main WhatsApp device (it goes to the default chat set in *Configure*).
 3. Call `whatsapp_notifier.send_message` in Developer tools > Actions with a `chat_id`.
-4. If something fails, check the app log and the *Status* sensor (`pairing_required` or `logged_out` means: link again via `/qr`).
+4. If something fails, check the app log and the *Status* sensor (`pairing_required` means: link via `/qr`; after `logged_out`, the bridge automatically creates a fresh session and shows a new QR code).
 
 ### Replies
 
 When someone writes in a chat you added, its **Last message** sensor updates and the event `whatsapp_notifier_message_received` fires with the same fields as the sensor attributes.
 
-**Send an image:** give `whatsapp_notifier.send_message` an `image` (path of a PNG or JPEG, max 5 MB). The `message` becomes the caption. The file must be in a folder Home Assistant allows, such as `/config/www` (or one listed in `allowlist_external_dirs`). This needs bridge add-on 0.3.0 or newer.
+**Send an image:** give `whatsapp_notifier.send_message` an `image` (path of a PNG or JPEG, max 5 MB). The `message` becomes the caption. The file must be in a folder Home Assistant allows, such as `/config/www` (or one listed in `allowlist_external_dirs`). This needs Go Bridge 0.5.0 or newer.
 
 ```yaml
 action: whatsapp_notifier.send_message

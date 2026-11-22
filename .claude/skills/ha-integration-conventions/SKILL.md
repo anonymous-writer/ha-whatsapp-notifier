@@ -4,7 +4,7 @@ description: Conventions for custom_components/whatsapp_notifier. Use when editi
 user-invocable: false
 ---
 
-- Integration lives in `custom_components/whatsapp_notifier/`. Bridge lives in `whatsapp_bridge/` (Node, ESM).
+- Integration lives in `custom_components/whatsapp_notifier/`. Bridge lives in `whatsapp_bridge/` (Go, whatsmeow).
 - Entities derive from the shared `Base` class. Add new ones next to `StatusSensor` and `ChatSensor`.
 - Chat settings are subentries (`ChatSubentryFlow`). Global settings go in `WhatsAppOptionsFlow`.
 - Filtering per function belongs in the integration, not in template sensors.

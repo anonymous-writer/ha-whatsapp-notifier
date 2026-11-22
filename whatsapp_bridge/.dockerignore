@@ -1,0 +1,6 @@
+*.test
+auth/
+data/
+*.db
+*.db-shm
+*.db-wal

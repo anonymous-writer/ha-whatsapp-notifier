@@ -8,7 +8,7 @@ Review `whatsapp_bridge/` and `custom_components/whatsapp_notifier/` for:
 
 - WebSocket auth and origin checks (`ws`).
 - Input validation: JID parsing (`toJid`), message content (`buildContent`), image size (`MAX_IMAGE_BYTES`), URL fetching (SSRF).
-- Baileys session and credential storage: file permissions, leaks in logs (`pino`).
+- whatsmeow SQLite session database: file permissions, backups, and secrets in logs.
 - Secrets or personal data in code, README, docs or git history.
 - Dependency risk in `package.json`.
 

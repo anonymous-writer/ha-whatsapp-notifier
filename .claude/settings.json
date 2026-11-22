@@ -3,13 +3,13 @@
     "PreToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{ "type": "command", "command": "node .claude/hooks/block-generated.mjs" }]
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/block-generated.sh" }]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{ "type": "command", "command": "node .claude/hooks/bridge-test.mjs" }]
+        "hooks": [{ "type": "command", "command": "bash .claude/hooks/bridge-test.sh" }]
       }
     ]
   }

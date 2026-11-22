@@ -10,7 +10,32 @@ permissions:
   packages: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: whatsapp_bridge
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+          cache-dependency-path: whatsapp_bridge/go.mod
+
+      - name: Resolve Go modules
+        run: go mod tidy
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Run Go vet
+        run: go vet ./...
+
   docker:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Check out source

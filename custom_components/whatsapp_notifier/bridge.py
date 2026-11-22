@@ -40,7 +40,7 @@ class Bridge:
         if image:
             body["image"] = base64.b64encode(image).decode()
         try:
-            async with self.session.post(self.base + "/send", json=body, headers=self.headers, timeout=ClientTimeout(total=20)) as r:
+            async with self.session.post(self.base + "/send", json=body, headers=self.headers, timeout=ClientTimeout(total=90)) as r:
                 data = await r.json()
                 if r.status >= 400:
                     raise HomeAssistantError(f"WhatsApp send failed: {data.get('error', r.status)}")

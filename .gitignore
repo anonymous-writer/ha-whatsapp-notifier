@@ -1,4 +1,3 @@
-node_modules/
 auth/
 __pycache__/
 forward.json
@@ -8,3 +7,6 @@ handoff.md
 CLAUDE.local.md
 CLAUDE.md
 .claude/settings.local.json
+*.db
+*.db-shm
+*.db-wal
