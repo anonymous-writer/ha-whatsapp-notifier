@@ -1,5 +1,7 @@
 # WhatsApp Notifier
 
+<img src="custom_components/whatsapp_notifier/brand/icon.png" width="128" alt="WhatsApp Notifier icon">
+
 Send WhatsApp messages from Home Assistant to a person or a group, and react to replies, **without an external server or subscription**. Everything runs on your own Home Assistant.
 
 **Why this integration?**
