@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a problem with WhatsApp Notifier or the Go bridge.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not post API tokens, WhatsApp session files, phone numbers, or private message contents.
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the problem
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Integration / bridge version
+      placeholder: "0.5.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Home Assistant OS
+        - Home Assistant Container
+        - Raspberry Pi OS / Podman
+        - Linux server / Docker
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Redact tokens, phone numbers and personal information.
+      render: text
+    validations:
+      required: false

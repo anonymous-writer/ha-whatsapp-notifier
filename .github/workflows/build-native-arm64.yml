@@ -1,0 +1,147 @@
+name: Build native Linux ARM64 binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional existing release tag to rebuild and attach to (for example v0.5.2). Leave empty for a test build."
+        required: false
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test Go bridge
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: whatsapp_bridge
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
+
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag || '' }}
+        run: |
+          if [[ -n "$RELEASE_TAG" && ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid release tag: $RELEASE_TAG"
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: whatsapp_bridge/go.mod
+          cache: true
+
+      - name: Resolve Go modules and generate go.sum
+        run: go mod tidy
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+  build-arm64:
+    name: Build native Linux ARM64 binary
+    needs: test
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: whatsapp_bridge
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: whatsapp_bridge/go.mod
+          cache: true
+
+      - name: Resolve Go modules and generate go.sum
+        run: go mod tidy
+
+      - name: Install static ARM64 C toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
+
+      - name: Build standalone ARM64 binary (native runner, CGO enabled)
+        env:
+          GOOS: linux
+          GOARCH: arm64
+          CGO_ENABLED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          CC=musl-gcc go build -trimpath \
+            -ldflags="-s -w -linkmode external -extldflags=-static" \
+            -o dist/whatsapp-bridge-linux-arm64 .
+
+          # Fail the workflow if the binary accidentally depends on glibc.
+          if readelf -l dist/whatsapp-bridge-linux-arm64 | grep -q INTERP; then
+            echo "::error::The ARM64 binary is not statically linked"
+            exit 1
+          fi
+
+      - name: Package binary
+        run: |
+          tar -czf dist/whatsapp-bridge-linux-arm64.tar.gz -C dist whatsapp-bridge-linux-arm64
+          cd dist
+          sha256sum whatsapp-bridge-linux-arm64 whatsapp-bridge-linux-arm64.tar.gz > SHA256SUMS
+
+      - name: Upload standalone ARM64 artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: whatsapp-bridge-linux-arm64
+          path: |
+            whatsapp_bridge/dist/whatsapp-bridge-linux-arm64
+            whatsapp_bridge/dist/whatsapp-bridge-linux-arm64.tar.gz
+            whatsapp_bridge/dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release-assets:
+    name: Attach ARM64 binary to GitHub Release
+    if: github.event_name == 'release' || inputs.release_tag != ''
+    needs: build-arm64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download ARM64 artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: whatsapp-bridge-linux-arm64
+          path: dist
+
+      - name: Generate GitHub release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh api --method POST "repos/${GH_REPO}/releases/generate-notes" \
+            -f tag_name="$RELEASE_TAG" --jq '.body' > release-notes.md
+          gh release edit "$RELEASE_TAG" --notes-file release-notes.md
+
+      - name: Attach ARM64 binary and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            dist/whatsapp-bridge-linux-arm64 \
+            dist/whatsapp-bridge-linux-arm64.tar.gz \
+            dist/SHA256SUMS --clobber

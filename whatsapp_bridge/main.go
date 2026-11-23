@@ -5,9 +5,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,11 +25,14 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	qrcode "github.com/skip2/go-qrcode"
 	"go.mau.fi/whatsmeow"
+	waCompanionReg "go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -37,9 +42,40 @@ const (
 )
 
 type options struct {
-	APIToken     string `json:"api_token"`
-	PairingPhone string `json:"pairing_phone"`
-	Port         int    `json:"port"`
+	Host         string `json:"host" yaml:"host"`
+	APIToken     string `json:"api_token" yaml:"api_token"`
+	PairingPhone string `json:"pairing_phone" yaml:"pairing_phone"`
+	Port         string `json:"port" yaml:"port"`
+	DataDir      string `json:"data_dir" yaml:"data_dir"`
+	AuthDir      string `json:"auth_dir" yaml:"auth_dir"`
+}
+
+// UnmarshalJSON accepts both numeric and quoted port values for compatibility
+// with existing Home Assistant options.json files and native YAML configs.
+func (o *options) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Host         string          `json:"host"`
+		APIToken     string          `json:"api_token"`
+		PairingPhone string          `json:"pairing_phone"`
+		Port         json.RawMessage `json:"port"`
+		DataDir      string          `json:"data_dir"`
+		AuthDir      string          `json:"auth_dir"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	o.Host, o.APIToken, o.PairingPhone = raw.Host, raw.APIToken, raw.PairingPhone
+	o.DataDir, o.AuthDir = raw.DataDir, raw.AuthDir
+	if len(raw.Port) > 0 {
+		if err := json.Unmarshal(raw.Port, &o.Port); err != nil {
+			var number int
+			if numberErr := json.Unmarshal(raw.Port, &number); numberErr != nil {
+				return err
+			}
+			o.Port = fmt.Sprint(number)
+		}
+	}
+	return nil
 }
 
 type bridgeStatus struct {
@@ -137,23 +173,27 @@ type bridge struct {
 }
 
 func main() {
+	configPath := parseCommandLine()
 	// WhatsApp session credentials and the SQLite database are private to this process user.
 	syscall.Umask(0o077)
-	opts := readOptions()
-	token := firstNonEmpty(opts.APIToken, os.Getenv("API_TOKEN"))
+	opts := readOptions(configPath)
+	// Values from environment variables override the YAML/JSON config file. This
+	// keeps container deployments compatible while making native installs easy.
+	token := firstNonEmpty(os.Getenv("API_TOKEN"), opts.APIToken)
 	if token == "" {
 		log.Fatal("api_token is required; refusing to start without API authentication")
 	}
 
-	port := defaultPort
-	if opts.Port > 0 {
-		port = fmt.Sprint(opts.Port)
-	}
+	port := firstNonEmpty(opts.Port, defaultPort)
 	if envPort := os.Getenv("PORT"); envPort != "" {
 		port = envPort
 	}
+	host := firstNonEmpty(opts.Host, "0.0.0.0")
+	if envHost := os.Getenv("HOST"); envHost != "" {
+		host = envHost
+	}
 
-	dataDir := os.Getenv("DATA_DIR")
+	dataDir := firstNonEmpty(os.Getenv("DATA_DIR"), opts.DataDir)
 	if dataDir == "" {
 		if _, err := os.Stat("/data"); err == nil {
 			dataDir = "/data"
@@ -161,7 +201,7 @@ func main() {
 			dataDir = "./data"
 		}
 	}
-	authDir := os.Getenv("AUTH_DIR")
+	authDir := firstNonEmpty(os.Getenv("AUTH_DIR"), opts.AuthDir)
 	if authDir == "" {
 		authDir = filepath.Join(dataDir, "auth")
 	}
@@ -174,7 +214,7 @@ func main() {
 
 	b := &bridge{
 		token:       token,
-		pairPhone:   digitsOnly(firstNonEmpty(opts.PairingPhone, os.Getenv("PAIRING_PHONE"))),
+		pairPhone:   digitsOnly(firstNonEmpty(os.Getenv("PAIRING_PHONE"), opts.PairingPhone)),
 		forwardFile: filepath.Join(dataDir, "forward.json"),
 		status:      bridgeStatus{Status: "connecting"},
 		forward:     make(map[string]bool),
@@ -201,13 +241,13 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:              ":" + port,
+		Addr:              net.JoinHostPort(strings.Trim(host, "[]"), port),
 		Handler:           b.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
 	go func() {
-		log.Printf("Go WhatsApp bridge listening on :%s", port)
+		log.Printf("Go WhatsApp bridge listening on %s", net.JoinHostPort(strings.Trim(host, "[]"), port))
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("HTTP server: %v", err)
 		}
@@ -228,14 +268,75 @@ func main() {
 	}
 }
 
-func readOptions() options {
+// parseCommandLine handles startup options. The config file can be selected
+// with --config; individual settings can be overridden with environment variables.
+func parseCommandLine() string {
+	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to YAML or JSON configuration file (overrides CONFIG_FILE)")
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "Usage: %s [options]\n\n", os.Args[0])
+		fmt.Fprintln(fs.Output(), "Options:")
+		fs.PrintDefaults()
+		fmt.Fprintln(fs.Output(), "\nConfiguration environment variables (override file values):")
+		fmt.Fprintln(fs.Output(), "  HOST           Listen address (default: 0.0.0.0)")
+		fmt.Fprintln(fs.Output(), "  PORT           Listen port (default: 8099)")
+		fmt.Fprintln(fs.Output(), "  API_TOKEN      API authentication token (required)")
+		fmt.Fprintln(fs.Output(), "  PAIRING_PHONE  Phone number for WhatsApp pairing")
+		fmt.Fprintln(fs.Output(), "  DATA_DIR       Directory for bridge data")
+		fmt.Fprintln(fs.Output(), "  AUTH_DIR       Directory for WhatsApp session data")
+		fmt.Fprintln(fs.Output(), "  CONFIG_FILE    Config path if --config is not supplied")
+		fmt.Fprintln(fs.Output(), "\nPrecedence: command-line --config > CONFIG_FILE > auto-detected config; environment values override config file values.")
+	}
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		log.Fatal(err)
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(fs.Output(), "unexpected positional arguments: %s\n", strings.Join(fs.Args(), " "))
+		fs.Usage()
+		os.Exit(2)
+	}
+	return *configPath
+}
+
+func readOptions(cliConfigPath string) options {
 	var opts options
-	raw, err := os.ReadFile("/data/options.json")
-	if err == nil {
-		if err := json.Unmarshal(raw, &opts); err != nil {
-			log.Printf("warning: could not parse /data/options.json: %v", err)
+
+	// CONFIG_FILE is explicit and takes precedence. Without it, retain the
+	// Home Assistant add-on JSON path and support native YAML/JSON defaults.
+	configPath := strings.TrimSpace(cliConfigPath)
+	if configPath == "" {
+		configPath = strings.TrimSpace(os.Getenv("CONFIG_FILE"))
+	}
+	if configPath == "" {
+		candidates := []string{"/data/options.json"}
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			candidates = append(candidates,
+				filepath.Join(home, ".config", "whatsapp-bridge", "config.yaml"),
+				filepath.Join(home, ".config", "whatsapp-bridge", "config.yml"),
+				filepath.Join(home, ".config", "whatsapp-bridge", "config.json"),
+			)
+		}
+		candidates = append(candidates, "/etc/whatsapp-bridge/config.yaml", "/etc/whatsapp-bridge/config.yml", "/etc/whatsapp-bridge/config.json", "./config.yaml", "./config.yml", "./config.json")
+		for _, candidate := range candidates {
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				configPath = candidate
+				break
+			}
 		}
 	}
+	if configPath == "" {
+		log.Printf("no config file found; using environment variables and defaults")
+		return opts
+	}
+
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		log.Fatalf("read config file %q: %v", configPath, err)
+	}
+	if err := yaml.Unmarshal(raw, &opts); err != nil {
+		log.Fatalf("parse YAML/JSON config file %q: %v", configPath, err)
+	}
+	log.Printf("loaded configuration from %s", configPath)
 	return opts
 }
 
@@ -268,6 +369,11 @@ func (b *bridge) startWhatsApp(authDir string) error {
 	if device == nil {
 		device = container.NewDevice()
 	}
+
+	// Customize the companion-device identity shown in WhatsApp's
+	// Linked devices screen. WhatsApp controls the actual device icon.
+	store.DeviceProps.Os = proto.String("Home Assistant")
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
 
 	client := whatsmeow.NewClient(device, nil)
 	b.setClient(client)
@@ -401,7 +507,7 @@ func (b *bridge) handleWhatsAppEvent(raw any) {
 				client := b.getClient()
 				go func() {
 					// PairPhone must be called after the QR event has been received.
-					code, err := client.PairPhone(context.Background(), b.pairPhone, true, whatsmeow.PairClientChrome, "Chrome (Linux)")
+					code, err := client.PairPhone(context.Background(), b.pairPhone, true, whatsmeow.PairClientChrome, "Home Assistant")
 					if err != nil {
 						b.setStatus("error", "", err.Error())
 						log.Printf("phone pairing failed: %v", err)

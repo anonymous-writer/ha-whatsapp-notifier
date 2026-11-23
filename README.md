@@ -1,294 +1,6 @@
-<div align="center">
-
-<img src="custom_components/whatsapp_notifier/brand/icon.png" width="128" alt="WhatsApp Notifier icon">
-
 # WhatsApp Notifier
 
-[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=anonymous-writer&repository=ha-whatsapp-notifier&category=integration) [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/anonymouse0501)
-
-[Nederlands](#nederlands) | [English](#english)
-
-</div>
-
-## Nederlands
-
-Stuur WhatsApp-berichten vanuit Home Assistant naar een persoon of groep, en reageer op antwoorden, **zonder externe server of abonnement**. Alles draait op je eigen Home Assistant.
-
-**Waarom deze integratie?**
-
-- 👥 **Stuur naar WhatsApp-groepen**, niet alleen naar personen, met opmaak en afbeeldingen.
-- 💬 **Antwoord via WhatsApp en laat Home Assistant handelen.** Een antwoord ("ja", "klaar") start een automatisering, bijvoorbeeld een herinnering stoppen of een schakelaar omzetten. Je kunt zelfs koppelen aan één specifiek bericht.
-- 🔒 **Zelf gehost.** Geen externe server, geen abonnement.
-- 🧩 **Eén apparaat per chat**, met eigen notify-entiteit en sensor voor het laatste bericht.
-
-Het bestaat uit twee delen:
-
-1. **Bridge-app** (`whatsapp_bridge/`, vóór Home Assistant 2026.2 een add-on genoemd): een zelfstandige Go-service met [whatsmeow](https://github.com/tulir/whatsmeow). Hij koppelt aan je WhatsApp-account als *gekoppeld apparaat* (zoals WhatsApp Web).
-2. **Integratie** (`custom_components/whatsapp_notifier/`): een statussensor, een testknop, een `send_message`-service en **één apparaat per chat** met een eigen notify-entiteit en een sensor "Laatste bericht".
-
-Vereist Home Assistant 2025.3 of nieuwer.
-
-> **Disclaimer:** whatsmeow gebruikt het onofficiële WhatsApp Web Multi-Device-protocol. WhatsApp kan dit protocol wijzigen en gebruik kan risico op accountbeperkingen opleveren. Gebruik een apart nummer, verstuur weinig berichten en spam nooit.
-
-### Voorbeelden
-
-Berichten die met deze integratie vanuit Home Assistant zijn verstuurd:
-
-<p>
-  <img src="docs/screenshots/afval-herinnering.png" alt="Afvalherinnering die stopt als je antwoordt" width="280">
-  <img src="docs/screenshots/wasmachine-klaar.png" alt="Wasmachine klaar, met herinnering als niemand reageert" width="280">
-  <img src="docs/screenshots/weerbericht.png" alt="Weerwaarschuwing" width="420">
-</p>
-
-De eerste twee vragen om een antwoord. Een antwoord op het bericht kan de herinnering stoppen, zie [Antwoorden](#antwoorden).
-
-De Go-Bridge wordt bij het publiceren van een GitHub Release automatisch als multi-architectuur Docker-image gebouwd en naar GitHub Container Registry gepusht:
-
-- `ghcr.io/anonymous-writer/ha-whatsapp-notifier:latest`
-- Architecturen: `linux/amd64` en `linux/arm64` (Home Assistant `amd64` en `aarch64`).
-
-### Installatie
-
-#### 1. Bridge-app
-
-1. Klik op deze knop om de repository aan je Home Assistant toe te voegen en installeer daarna **WhatsApp Bridge**:
-
-   [![Open je Home Assistant en toon de dialoog om een app-repository toe te voegen.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fanonymous-writer%2Fha-whatsapp-notifier)
-
-   Of voeg hem handmatig toe: HA > Instellingen > Apps, open de store, dan ⋮ > Repositories, en voeg `https://github.com/anonymous-writer/ha-whatsapp-notifier` toe. (Vóór Home Assistant 2026.2 heette dit Instellingen > Add-ons.)
-2. Stel op het tabblad *Configuratie* in:
-   - `api_token` (**verplicht**): verzin een lang wachtwoord. De bridge start niet zonder. Je hebt het hieronder opnieuw nodig.
-   - `pairing_phone`: laat **leeg** om met een QR-code te koppelen (aanbevolen, zie hieronder).
-3. Sla op en start de app.
-
-> **Migratie vanaf Node/Baileys:** de oude Baileys-authenticatie kan niet door whatsmeow worden geïmporteerd. Bij de eerste start van de Go-Bridge moet je WhatsApp opnieuw koppelen. De nieuwe sessie wordt opgeslagen in `/data/auth/whatsapp.db`.
-
-#### 2. WhatsApp koppelen (QR-code)
-
-1. Open op een computer `http://homeassistant.local:8099/qr?token=<api_token>`. Je ziet een QR-code die elke 15 seconden ververst.
-2. Op de telefoon van het nummer dat de berichten gaat versturen: WhatsApp > Instellingen > Gekoppelde apparaten > Apparaat koppelen, en scan de QR-code.
-3. In het log van de app staat nu `status connected`. De sessie wordt als SQLite-database bewaard in `/data/auth/whatsapp.db`, dus na een herstart hoef je niet opnieuw te koppelen.
-
-Alternatief: vul je nummer in bij `pairing_phone` (internationaal, alleen cijfers, bijvoorbeeld `31612345678`), herstart de app en voer de code van 8 tekens uit het log in onder *Koppelen met telefoonnummer*. Dit werkte op sommige iPhones niet, dus geef de voorkeur aan de QR-code. Gebruik nooit beide tegelijk: maak `pairing_phone` leeg als je de QR-pagina gebruikt.
-
-#### 3. Integratie
-
-1. Installeer via HACS: ⋮ > Aangepaste repositories > de URL van deze repo, categorie *Integratie*. Herstart HA. (Of kopieer `custom_components/whatsapp_notifier` naar je config-map.)
-2. Instellingen > Apparaten en services > Integratie toevoegen > **WhatsApp Notifier**: host `homeassistant.local` (of het HA-adres), poort `8099`, je `api_token` en eventueel een **standaard chat-ID**. Wijzig de standaard later met de knop *Configureren* van de integratie.
-
-Geen apps (HA Container/Core)? Installeer Go 1.27+, ga naar `whatsapp_bridge` en start de bridge met `go mod download && API_TOKEN=secret go run .`. Open daarna `/qr` zoals hierboven. Optionele omgevingsvariabelen: `PORT`, `PAIRING_PHONE`, `AUTH_DIR` en `DATA_DIR`.
-
-### Chat-ID's vinden
-
-**Een persoon:** het telefoonnummer met landcode, alleen cijfers, zonder `+` en zonder voorloop-`0`.
-`06 12345678` in Nederland wordt `31612345678`. (`31612345678@c.us` en `31612345678@s.whatsapp.net` werken ook, zodat bestaande automatiseringen met dat formaat blijven werken.)
-
-**Een groep:** open dit in een browser op je netwerk:
-
-```
-http://homeassistant.local:8099/groups?token=<api_token>
-```
-
-Je krijgt een lijst als `[{"chat_id":"120363012345678901@g.us","name":"Familie"}, ...]`. Kopieer de hele `chat_id`, inclusief `@g.us`. Het gekoppelde nummer moet lid van de groep zijn. Ontbreekt de groep, wacht dan een minuut en laad opnieuw.
-
-### Chats: één apparaat per chat
-
-Druk op de integratiepagina (Instellingen > Apparaten en services > WhatsApp Notifier) op **Chat toevoegen** en vul in:
-
-- **Naam**: wordt de apparaatnaam, bijvoorbeeld "Familiegroep".
-- **Chat-ID**: een nummer of groeps-ID, zie hierboven.
-- **Alleen antwoorden op berichten van deze bridge**: zie [Antwoorden](#antwoorden).
-
-Elke chat wordt een eigen apparaat met:
-
-| Entiteit | Wat het doet |
-|---|---|
-| Bericht (`notify`) | Verstuurt naar deze chat. |
-| Testbericht versturen (`button`) | Verstuurt een testbericht naar deze chat. |
-| Laatste bericht (`sensor`) | De state is de tekst van het laatst ontvangen bericht in deze chat (max. 255 tekens). Attributen: `text`, `sender`, `chat_id`, `from_me`, `is_group`, `id`, `quoted_message_id`, `quoted_text`, `quoted_from_me`. |
-
-Gebruik *⋮ > Opnieuw configureren* bij de chat om hem te wijzigen, of verwijder hem om het apparaat te verwijderen. **Inkomende berichten worden alleen doorgegeven van chats die je hebt toegevoegd** (privacy: al het andere wordt in de bridge weggegooid).
-
-Het hoofdapparaat **WhatsApp** (de bridge) heeft:
-
-| Entiteit | Wat het doet |
-|---|---|
-| Status (`sensor`) | `connected`, `connecting`, `pairing_required`, `logged_out`, `error` of `bridge_unreachable`. |
-| Testbericht versturen (`button`) | Verstuurt een testbericht naar de standaard chat. |
-| Bericht (`notify`) | Verstuurt naar de **standaard chat** uit de opties van de integratie. Toont *onbekend* tot het eerste bericht; dat is normaal. |
-
-Entity-ID's volgen de taal van je HA (controleer ze onder Ontwikkelaarstools > Statussen).
-
-### Versturen
-
-Naar een chat die je hebt toegevoegd, met zijn notify-entiteit:
-
-```yaml
-action: notify.send_message
-target:
-  entity_id: notify.familiegroep_bericht
-data:
-  title: "Containers"
-  message: "Morgen gaan de containers buiten"
-```
-
-Naar elke chat (of de standaard chat als `chat_id` wegblijft); dit geeft ook het id van het verstuurde bericht terug:
-
-```yaml
-action: whatsapp_notifier.send_message
-data:
-  chat_id: "120363012345678901@g.us"
-  message: "Het eten is klaar"
-response_variable: sent   # sent.message_id
-```
-
-WhatsApp-opmaak werkt in de tekst: `*vet*`, `_cursief_`, `~doorgehaald~`.
-
-### Testen
-
-1. `Status` toont *Connected*.
-2. Druk op **Testbericht versturen** bij een chat-apparaat (gaat naar die chat) of bij het hoofdapparaat WhatsApp (gaat naar de standaard chat uit *Configureren*).
-3. Roep `whatsapp_notifier.send_message` aan in Ontwikkelaarstools > Acties met een `chat_id`.
-4. Gaat er iets mis, bekijk dan het log van de app en de sensor *Status* (`pairing_required` betekent: koppelen via `/qr`; na `logged_out` maakt de bridge automatisch een nieuwe sessie aan en verschijnt opnieuw een QR-code).
-
-### Antwoorden
-
-Schrijft iemand in een chat die je hebt toegevoegd, dan wordt de sensor **Laatste bericht** van die chat bijgewerkt en komt het event `whatsapp_notifier_message_received` met dezelfde velden als de sensorattributen.
-
-**Een afbeelding versturen:** geef `whatsapp_notifier.send_message` een `image` (pad naar een PNG of JPEG, max. 5 MB). Het `message` wordt het onderschrift. Het bestand moet in een map staan die Home Assistant toestaat, zoals `/config/www` (of een map uit `allowlist_external_dirs`). Dit vereist Go-Bridge 0.4.0 of nieuwer.
-
-```yaml
-action: whatsapp_notifier.send_message
-data:
-  chat_id: "120363012345678901@g.us"
-  message: "Weekgrafiek"
-  image: /config/www/chart.png
-```
-
-**Antwoord op één specifiek bericht:** in WhatsApp kunnen mensen een bericht wegvegen en daarop antwoorden. Dan is `quoted_message_id` het id van het beantwoorde bericht, `quoted_text` de tekst ervan, en `quoted_from_me` is `true` als het een bericht van de bridge was. Vink bij een chat *Alleen antwoorden op berichten van deze bridge* aan en de sensor negeert al het andere. Om een antwoord aan één exact bericht te koppelen, vergelijk je `quoted_message_id` met de `message_id` die `whatsapp_notifier.send_message` teruggeeft.
-
-Voorbeeld: vraag iets en wacht maximaal 10 minuten op "ja" als antwoord *op dat bericht*:
-
-```yaml
-actions:
-  - action: whatsapp_notifier.send_message
-    data: { message: "Morgen komen de containers. Staan ze al buiten?" }
-    response_variable: sent
-  # blijf wachten tot iemand ons bericht beantwoordt; andere chatberichten worden overgeslagen.
-  # Bij een timeout stopt het script.
-  - repeat:
-      sequence:
-        - wait_for_trigger:
-            - trigger: event
-              event_type: whatsapp_notifier_message_received
-          timeout: "00:10:00"
-          continue_on_timeout: false
-      # antwoordwoorden in elke taal die je wilt
-      until: >
-        {{ wait.trigger.event.data.quoted_message_id == sent.message_id
-           and wait.trigger.event.data.text | lower | trim in ['ja', 'yes', 'oui'] }}
-  - action: input_boolean.turn_on
-    target: { entity_id: input_boolean.containers_buiten }
-```
-
-#### Tips voor automatiseringen op de sensor
-
-- Stuurt iemand twee keer dezelfde tekst ("ja", "ja"), dan verandert de **state** van de sensor niet, alleen het attribuut `id`. Een state-trigger met `to:` gaat dan maar één keer af. Trigger op *elke* wijziging van de sensor (zonder `to:`), of gebruik het event zoals hierboven.
-- De sensor is leeg na een herstart van Home Assistant tot het volgende bericht binnenkomt.
-- `sender` kan in groepen een interne WhatsApp-id (`...@lid`) zijn in plaats van een telefoonnummer.
-
-### Kant-en-klaar script
-
-Een script dat een opgemaakt bericht (emoji, vette kop, tekst, cursieve voetnoot) naar een chat stuurt en terugvalt op een telefoonmelding als WhatsApp faalt. Vervang `notify.mobile_app_JOUW_TELEFOON`. Laat `chat_id` leeg om de standaard chat te gebruiken.
-
-```yaml
-alias: WhatsApp melding
-description: Stuur een opgemaakt WhatsApp-bericht, met een telefoonmelding als terugval.
-icon: mdi:whatsapp
-mode: parallel
-max: 20
-fields:
-  emoji:
-    name: Emoji
-    example: "🧺"
-    selector: { text: }
-  kop:
-    name: Kop
-    description: Wordt vet weergegeven
-    required: true
-    example: Wasmachine klaar!
-    selector: { text: }
-  tekst:
-    name: Tekst
-    required: true
-    example: De was is klaar.
-    selector:
-      text:
-        multiline: true
-  voetnoot:
-    name: Voetnoot
-    description: Optionele cursieve regel onderaan
-    selector: { text: }
-  chat_id:
-    name: Chat-ID
-    description: Laat leeg voor de standaard chat
-    selector: { text: }
-sequence:
-  - variables:
-      body: |-
-        {% if emoji | default('') %}{{ emoji }} {% endif %}*{{ kop }}*
-
-        {{ tekst }}{% if voetnoot | default('') %}
-
-        _{{ voetnoot }}_{% endif %}
-  - action: whatsapp_notifier.send_message
-    data:
-      chat_id: "{{ chat_id | default('') }}"
-      message: "{{ body }}"
-    response_variable: sent
-    continue_on_error: true
-  - alias: Terugval op de telefoon als WhatsApp faalt
-    if:
-      - condition: template
-        value_template: "{{ sent is not defined or sent.message_id is not defined }}"
-    then:
-      - action: notify.mobile_app_JOUW_TELEFOON
-        data:
-          title: "{{ kop }}"
-          message: "{{ tekst }} (WhatsApp mislukt)"
-```
-
-Gebruik het vanuit een automatisering met `action: script.whatsapp_melding` en `data: { kop: ..., tekst: ... }`.
-
-### Hetzelfde nummer voor versturen en antwoorden
-
-Berichten die je op je eigen telefoon typt komen ook aan op het gekoppelde apparaat (`from_me: true`); de bridge negeert alleen zijn *eigen* berichten, dus je antwoorden horen HA te bereiken. Antwoorden vanaf je eigen telefoon op een bridgebericht in een groep zou ook moeten werken (`quoted_from_me` is dan `true`), maar dat is nog niet bevestigd. In groepen kan WhatsApp afzenders als `@lid`-id's melden. Gaat het mis, gebruik dan een apart nummer voor de bridge (aanbevolen).
-
-### Beveiliging
-
-- Per Home Assistant wordt maar één bridge ondersteund; `whatsapp_notifier.send_message` gebruikt de eerste die is ingesteld.
-- De bridge verstuurt maximaal 20 berichten per minuut (daarboven geeft hij een fout), om je nummer te beschermen tegen een op hol geslagen automatisering.
-- Iedereen met de `api_token` kan berichten versturen als jouw account. Houd poort 8099 binnen je netwerk en zet hem nooit open naar internet.
-
-### Status
-
-Koppelen, versturen naar een groep en de sensor *Laatste bericht* werken aantoonbaar. Apparaten per chat en *Alleen antwoorden* hebben feedback uit de praktijk nodig: open gerust een issue.
-
-### Werkt samen met
-
-Andere integraties van dezelfde auteur die hun berichten via deze versturen:
-
-- [Workout Buddy](https://github.com/anonymouse-labs/ha-workout-buddy): workout-samenvattingen en dagoverzichten met een grafiek, naar een persoon of groep.
-- [Brandweerrooster](https://github.com/anonymouse-labs/ha-brandweerrooster): uitrukmeldingen en statistieken van de brandweer.
-- [RWM Afvalkalender](https://github.com/anonymouse-labs/ha-rwm-afval): herinneringen voor afvalophaling (Echt-Susteren, Nederlands).
-
-### Steun
-
-Bespaart deze integratie je tijd, dan kun je me [steunen op Ko-fi](https://ko-fi.com/anonymouse0501). Het is helemaal optioneel en de integratie blijft in beide gevallen gratis.
-
----
-
-## English
+<img src="custom_components/whatsapp_notifier/brand/icon.png" width="128" alt="WhatsApp Notifier icon">
 
 Send WhatsApp messages from Home Assistant to a person or a group, and react to replies, **without an external server or subscription**. Everything runs on your own Home Assistant.
 
@@ -301,7 +13,7 @@ Send WhatsApp messages from Home Assistant to a person or a group, and react to 
 
 It has two parts:
 
-1. **Bridge app** (`whatsapp_bridge/`, called an add-on before Home Assistant 2026.2): a standalone Go service using [whatsmeow](https://github.com/tulir/whatsmeow). It links to your WhatsApp account as a *linked device* (like WhatsApp Web).
+1. **Bridge** (`whatsapp_bridge/`): a standalone Go service using [whatsmeow](https://github.com/tulir/whatsmeow). It links to your WhatsApp account as a *linked device* (like WhatsApp Web).
 2. **Integration** (`custom_components/whatsapp_notifier/`): a status sensor, a test button, a `send_message` service, and **one device per chat** with its own notify entity and "Last message" sensor.
 
 Needs Home Assistant 2025.3 or newer.
@@ -322,34 +34,96 @@ The first two ask for a reply. A reply to the message can stop the reminder, see
 
 ### Install
 
-#### 1. Bridge app
+#### 1. Install and run the native Go bridge
 
-1. Click this button to add the repository to your Home Assistant, then install **WhatsApp Bridge**:
+The bridge is a standalone Go application. It is not a Home Assistant add-on and does not need a separate external server. On Linux, install the prebuilt binary for your architecture from the project's GitHub Releases.
 
-   [![Open your Home Assistant instance and show the add app repository dialog with a specific repository URL pre-filled.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fanonymous-writer%2Fha-whatsapp-notifier)
+For a Raspberry Pi running a 64-bit OS, use the **Linux ARM64** release asset. Install it, for example, as:
 
-   Or add it by hand: HA > Settings > Apps, open the store, then ⋮ > Repositories, and add `https://github.com/anonymous-writer/ha-whatsapp-notifier`. (Before Home Assistant 2026.2 this was Settings > Add-ons.)
-2. On the *Configuration* tab set:
-   - `api_token` (**required**): make up a long password. The bridge refuses to start without one. You need it again below.
-   - `pairing_phone`: leave **empty** to link with a QR code (recommended, see below).
-3. Save and start the app.
+```bash
+mkdir -p ~/.local/bin
+# Copy the downloaded whatsapp-bridge-linux binary to:
+# /home/pi/.local/bin/whatsapp-bridge-linux
+chmod +x /home/pi/.local/bin/whatsapp-bridge-linux
+```
 
-> **Migration from Node/Baileys:** the old Baileys authentication cannot be imported by whatsmeow. You must pair WhatsApp again the first time the Go bridge starts. The new session is stored in `/data/auth/whatsapp.db`.
+Create a configuration file, for example `~/.config/whatsapp-bridge/config.json` or `config.yaml`. Both JSON and YAML are supported:
 
-#### 2. Link your WhatsApp (QR code)
+```yaml
+host: "127.0.0.1"
+port: "8099"
+api_token: "YOUR_RANDOM_64_CHARACTER_TOKEN"
+pairing_phone: ""
+data_dir: "/home/pi/.local/share/whatsapp-bridge/data"
+auth_dir: "/home/pi/.local/share/whatsapp-bridge/data/auth"
+```
 
-1. Open `http://homeassistant.local:8099/qr?token=<api_token>` on a computer. You see a QR code that refreshes every 15 seconds.
-2. On the phone of the number that will send the messages: WhatsApp > Settings > Linked devices > Link a device, and scan the QR code.
-3. The app log now shows `status connected`. The session is stored as a SQLite database at `/data/auth/whatsapp.db`, so restarts need no new pairing.
+Generate a token with `openssl rand -hex 32` and protect the file:
 
-Alternative: put your number in `pairing_phone` (international, digits only, e.g. `31612345678`), restart the app and enter the 8-character code from the log under *Link with phone number instead*. This has failed on some iPhones, so prefer the QR code. Never use both at once: clear `pairing_phone` when you use the QR page.
+```bash
+chmod 600 ~/.config/whatsapp-bridge/config.json
+```
+
+Start the bridge manually:
+
+```bash
+~/.local/bin/whatsapp-bridge-linux --config ~/.config/whatsapp-bridge/config.json
+```
+
+Use `whatsapp-bridge-linux --help` to see the available command-line options and environment variables. The `--config` command-line option takes precedence over `CONFIG_FILE`. Environment variables (`HOST`, `PORT`, `API_TOKEN`, `PAIRING_PHONE`, `DATA_DIR`, and `AUTH_DIR`) override values from the configuration file.
+
+**Run it as a systemd user service (recommended on a Raspberry Pi):**
+
+Create `~/.config/systemd/user/whatsapp-bridge.service`:
+
+```ini
+[Unit]
+Description=WhatsApp Bridge (Go)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+ExecStart=%h/.local/bin/whatsapp-bridge-linux --config %h/.config/whatsapp-bridge/config.json
+Restart=always
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
+```
+
+Enable and start it:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now whatsapp-bridge.service
+systemctl --user status whatsapp-bridge.service
+```
+
+Follow the logs with:
+
+```bash
+journalctl --user -u whatsapp-bridge.service -f
+```
+
+To start the user service automatically at boot even when the user is not logged in, enable lingering for that account:
+
+```bash
+sudo loginctl enable-linger "$USER"
+```
+
+**Important:** Keep `data_dir` and `auth_dir` stable across upgrades and restarts. The WhatsApp linked-device session is stored in the SQLite database under `auth_dir`. If the bridge reports `pairing_required` after a restart, verify that it is using the same `auth_dir` and that the service user can read and write it before pairing again. Do not delete the authentication database. Never run the native binary and a container instance against the same SQLite database at the same time.
 
 #### 3. Integration
 
 1. Install via HACS: ⋮ > Custom repositories > this repo's URL, category *Integration*. Restart HA. (Or copy `custom_components/whatsapp_notifier` into your config folder.)
 2. Settings > Devices > Add integration > **WhatsApp Notifier**: host `homeassistant.local` (or the HA address), port `8099`, your `api_token` and optionally a **default chat ID**. Change the default later with the integration's *Configure* button.
 
-No apps (HA Container/Core)? Install Go 1.27+, enter `whatsapp_bridge` and run `go mod download && API_TOKEN=secret go run .`, then open `/qr` as above. Optional environment variables: `PORT`, `PAIRING_PHONE`, `AUTH_DIR` and `DATA_DIR`.
+Running Home Assistant Container/Core? Run the bridge separately on the same host or on a reachable Linux machine, using the native binary or the Docker image. Configure the integration with the bridge host, port, and matching API token.
 
 ### Finding chat IDs
 
@@ -422,7 +196,7 @@ WhatsApp formatting works in the text: `*bold*`, `_italic_`, `~strike~`.
 1. `Status` shows *Connected*.
 2. Press **Send test message** on a chat device (it goes to that chat), or on the main WhatsApp device (it goes to the default chat set in *Configure*).
 3. Call `whatsapp_notifier.send_message` in Developer tools > Actions with a `chat_id`.
-4. If something fails, check the app log and the *Status* sensor (`pairing_required` means: link via `/qr`; after `logged_out`, the bridge automatically creates a fresh session and shows a new QR code).
+4. If something fails, check the bridge log and the *Status* sensor (`pairing_required` means: link via `/qr`; after `logged_out`, the bridge automatically creates a fresh session and shows a new QR code).
 
 ### Replies
 
@@ -558,3 +332,56 @@ Other integrations by the same author that send their messages through this one:
 ### Support
 
 If this integration saves you some time, you can [support me on Ko-fi](https://ko-fi.com/anonymouse0501). It's entirely optional, and the integration stays free either way.
+
+
+## Release and build workflow
+
+This repository uses the release workflow from `.github/workflows`:
+
+- **CI** runs Go tests, `go vet`, a Go build, a Docker API smoke test, HACS validation and Home Assistant `hassfest` validation.
+- **Native ARM64 test build** can be started manually from Actions → *Build native Linux ARM64 binary*. Leave `release_tag` empty to get a downloadable development artifact. The build runs on a native ARM64 GitHub-hosted runner, keeps CGO enabled for SQLite, and links against musl statically so the binary does not depend on the runner’s glibc version.
+- **Release Please** opens or updates a release PR from Conventional Commits on `main`. Merge the PR to create a GitHub Release.
+- **Published release** builds the ARM64 standalone binary, attaches it with a `.tar.gz` archive and `SHA256SUMS`, and publishes the Docker image to GHCR.
+- Stable releases receive semver tags and `latest`; pre-releases receive their exact version tag and the moving `go-beta` tag.
+
+### One-time GitHub setup
+
+Create a fine-grained PAT or GitHub Bridge token with repository contents (read/write), pull requests (read/write), and issues (read/write) permissions. Save it as the repository Actions secret `RELEASE_PLEASE_TOKEN`. This is needed so the release created by Release Please can trigger the build workflows. Also allow GitHub Actions to write packages for GHCR under Settings → Actions → General if repository policy restricts it.
+
+Use Conventional Commit messages, for example `feat: add delivery receipts`, `fix: reconnect after timeout`, or `docs: clarify pairing setup`.
+
+
+## Configuration reference
+
+The native Go bridge accepts YAML (`.yaml`/`.yml`) and JSON configuration files. Select the file explicitly:
+
+```bash
+whatsapp-bridge-linux --config /absolute/path/to/config.yaml
+```
+
+You can also set `CONFIG_FILE`. If neither is set, the bridge checks its built-in default locations. Explicit `--config` is recommended for services because it makes the selected configuration unambiguous.
+
+Supported configuration keys and their environment-variable overrides:
+
+| Configuration key | Environment variable | Purpose |
+|---|---|---|
+| `host` | `HOST` | Interface to bind to (for example `127.0.0.1` or `0.0.0.0`) |
+| `port` | `PORT` | HTTP/API port (default `8099`) |
+| `api_token` | `API_TOKEN` | API authentication token |
+| `pairing_phone` | `PAIRING_PHONE` | Optional phone-number pairing; leave empty for QR pairing |
+| `data_dir` | `DATA_DIR` | Bridge data directory |
+| `auth_dir` | `AUTH_DIR` | WhatsApp session/database directory |
+
+Command-line help is available with:
+
+```bash
+whatsapp-bridge-linux --help
+```
+
+`host: "127.0.0.1"` only accepts connections from the same machine. Use `0.0.0.0` only when Home Assistant connects from another host or container, and restrict access with your firewall. Anyone with the API token can send messages through your WhatsApp account. Never expose the bridge port directly to the internet.
+
+Keep the same `data_dir` and `auth_dir` to retain the linked WhatsApp session. The bridge stores its whatsmeow session in SQLite under `auth_dir`. A `pairing_required` status after a restart usually means the bridge is looking at a different or inaccessible authentication directory. Check the configured path and file permissions before pairing again.
+
+## License
+
+This project is distributed under the MIT License. See [LICENSE](LICENSE).

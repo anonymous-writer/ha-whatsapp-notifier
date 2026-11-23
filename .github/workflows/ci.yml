@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go tests, vet and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: whatsapp_bridge
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: whatsapp_bridge/go.mod
+          cache: true
+          cache-dependency-path: whatsapp_bridge/go.sum
+
+      - name: Resolve Go modules and generate go.sum
+        run: go mod tidy
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+        run: go build -trimpath -o /tmp/whatsapp-bridge .
+
+  docker:
+    name: Docker build and API smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build -t whatsapp-bridge:ci ./whatsapp_bridge
+
+      - name: Run container
+        run: |
+          mkdir -p "$RUNNER_TEMP/whatsapp-data"
+          docker run -d --name whatsapp-bridge-ci \
+            -p 8099:8099 \
+            -e API_TOKEN=ci-test-token \
+            -v "$RUNNER_TEMP/whatsapp-data:/data" \
+            whatsapp-bridge:ci
+
+      - name: Smoke test authenticated API
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null http://127.0.0.1:8099/status; then
+              break
+            fi
+            sleep 1
+          done
+
+          unauthorized=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8099/status)
+          test "$unauthorized" = "401"
+
+          authorized=$(curl -sS -o "$RUNNER_TEMP/status.json" -w '%{http_code}' \
+            -H 'Authorization: Bearer ci-test-token' http://127.0.0.1:8099/status)
+          test "$authorized" = "200"
+
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["status"] in {"connecting","pairing_required","connected","error"}; print("Bridge API smoke test passed:", d["status"])' \
+            "$RUNNER_TEMP/status.json"
+
+      - name: Container logs
+        if: always()
+        run: docker logs whatsapp-bridge-ci
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hacs/action@main
+        with:
+          category: integration
+
+  hassfest:
+    name: Home Assistant validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
