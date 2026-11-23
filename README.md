@@ -120,8 +120,8 @@ sudo loginctl enable-linger "$USER"
 
 #### 3. Integration
 
-1. Install via HACS: ⋮ > Custom repositories > this repo's URL, category *Integration*. Restart HA. (Or copy `custom_components/whatsapp_notifier` into your config folder.)
-2. Settings > Devices > Add integration > **WhatsApp Notifier**: host `homeassistant.local` (or the HA address), port `8099`, your `api_token` and optionally a **default chat ID**. Change the default later with the integration's *Configure* button.
+1. In HACS, open **Integrations** > ⋮ > **Custom repositories**. Add `https://github.com/anonymous-writer/ha-whatsapp-notifier` and select **Integration**. Download **WhatsApp Notifier**, then restart Home Assistant. (Once the repository is available in the HACS default catalog, this manual repository step will no longer be needed.)
+2. Open **Settings > Devices & services > Add integration** and select **WhatsApp Notifier**. Enter the bridge hostname or IP address (without a port), port `8099`, and the API token configured in your existing bridge. The setup checks the connection and verifies that the endpoint speaks the expected bridge API before saving. The default chat ID is optional and can be added later. You can also paste a plain `http://` or `https://` base address without a path; the port remains a separate field.
 
 Running Home Assistant Container/Core? Run the bridge separately on the same host or on a reachable Linux machine, using the native binary or the Docker image. Configure the integration with the bridge host, port, and matching API token.
 
@@ -385,3 +385,23 @@ Keep the same `data_dir` and `auth_dir` to retain the linked WhatsApp session. T
 ## License
 
 This project is distributed under the MIT License. See [LICENSE](LICENSE).
+
+## Integration setup (0.5.2)
+
+The Home Assistant integration connects to the existing native WhatsApp Bridge; it does not install, replace, or modify that bridge.
+
+1. Install/update **WhatsApp Notifier** through HACS (or copy `custom_components/whatsapp_notifier` into your Home Assistant `custom_components` directory).
+2. Restart Home Assistant.
+3. Add **WhatsApp Notifier** under **Settings → Devices & services → Add integration**.
+4. Enter the bridge hostname or IP, port (normally `8099`), and the API token configured on the bridge.
+5. The integration checks the `/status` endpoint and token before saving.
+
+Use the integration's **Reconfigure** action to change the bridge connection later. Existing chat subentries are retained.
+
+### Adding chats
+
+When the bridge is connected to WhatsApp, the integration can load joined WhatsApp groups from the bridge's existing `GET /groups` endpoint. Select a group to add it without copying its JID. Individual contacts are not currently exposed by the bridge API, so add individual phone numbers manually using **Enter a chat manually instead**. Manual group IDs remain supported too.
+
+### Diagnostics
+
+The Home Assistant diagnostics download includes bridge status and integration settings, but excludes the API token. Review diagnostic files before sharing them publicly.

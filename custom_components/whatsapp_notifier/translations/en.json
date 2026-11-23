@@ -8,15 +8,39 @@
           "port": "Port",
           "token": "API token",
           "default_chat_id": "Default chat ID"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of your existing WhatsApp bridge. Do not include the port. Example: homeassistant.local or 192.168.1.20.",
+          "port": "HTTP API port of the bridge. The default is 8099.",
+          "token": "The API token configured in your existing bridge. Leave empty only if bridge authentication is disabled.",
+          "default_chat_id": "Optional. Used when a send action does not specify a recipient. You can configure chats later."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure WhatsApp bridge",
+        "data": {
+          "host": "Bridge host",
+          "port": "Port",
+          "token": "API token"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of your existing native bridge.",
+          "port": "HTTP API port, usually 8099.",
+          "token": "API token configured in your existing bridge."
         }
       }
     },
     "error": {
       "cannot_connect": "Cannot reach the bridge",
-      "invalid_auth": "Invalid API token"
+      "invalid_auth": "Invalid API token",
+      "invalid_host": "Enter a hostname, IP address, or plain http(s) base URL without a path.",
+      "invalid_port": "Port must be between 1 and 65535.",
+      "incompatible_bridge": "A server responded, but it does not look like a compatible WhatsApp bridge. Check the host and port.",
+      "bridge_error": "The bridge returned a server error. Check the bridge logs."
     },
     "abort": {
-      "already_configured": "Already configured"
+      "already_configured": "Already configured",
+      "group_not_available": "This group is no longer available. Refresh the group list and try again."
     }
   },
   "options": {
@@ -106,6 +130,30 @@
           "data_description": {
             "chat_id": "Phone number with country code (31612345678) or group ID (...@g.us)",
             "only_replies": "The Last message sensor only updates when someone uses WhatsApp reply on a message the bridge sent"
+          }
+        },
+        "select_group": {
+          "title": "Select WhatsApp group",
+          "data": {
+            "chat_id": "Available groups",
+            "only_replies": "Only replies to messages sent by this bridge",
+            "manual_entry": "Enter a chat manually instead"
+          },
+          "data_description": {
+            "chat_id": "Groups are loaded from your connected WhatsApp account. Contacts are not exposed by the current bridge API.",
+            "manual_entry": "Use this if you want to add an individual phone number or a group ID manually."
+          }
+        },
+        "manual": {
+          "title": "Add chat manually",
+          "data": {
+            "name": "Name",
+            "chat_id": "Chat ID",
+            "only_replies": "Only replies to messages sent by this bridge"
+          },
+          "data_description": {
+            "chat_id": "Phone number with country code (31612345678) or group ID (...@g.us)",
+            "only_replies": "The Last message sensor only updates when someone uses WhatsApp reply on a message the bridge sent."
           }
         }
       },

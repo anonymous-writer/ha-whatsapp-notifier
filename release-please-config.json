@@ -5,11 +5,6 @@
     ".": {
       "extra-files": [
         {
-          "type": "yaml",
-          "path": "whatsapp_bridge/config.yaml",
-          "jsonpath": "$.version"
-        },
-        {
           "type": "json",
           "path": "custom_components/whatsapp_notifier/manifest.json",
           "jsonpath": "$.version"
