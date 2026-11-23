@@ -1,0 +1,7 @@
+{
+  "api_token": "REPLACE_WITH_OUTPUT_OF_openssl_rand_-hex_32",
+  "pairing_phone": "",
+  "port": 8099,
+  "data_dir": "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data",
+  "auth_dir": "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data/auth"
+}

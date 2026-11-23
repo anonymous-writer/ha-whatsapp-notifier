@@ -583,3 +583,35 @@ This repository uses the release workflow from `.github/workflows`:
 Create a fine-grained PAT or GitHub App token with repository contents (read/write), pull requests (read/write), and issues (read/write) permissions. Save it as the repository Actions secret `RELEASE_PLEASE_TOKEN`. This is needed so the release created by Release Please can trigger the build workflows. Also allow GitHub Actions to write packages for GHCR under Settings → Actions → General if repository policy restricts it.
 
 Use Conventional Commit messages, for example `feat: add delivery receipts`, `fix: reconnect after timeout`, or `docs: clarify pairing setup`.
+
+
+## Native configuration file (JSON)
+
+The native Go binary can load a JSON configuration file. Set `CONFIG_FILE` to its
+path. If it is not set, the bridge checks `/data/options.json`, then
+`~/.config/whatsapp-bridge/config.json`, `/etc/whatsapp-bridge/config.json`,
+and finally `./config.json`. Environment variables override values from JSON.
+
+Example for a native Raspberry Pi installation:
+
+```json
+{
+  "api_token": "YOUR_RANDOM_64_CHARACTER_TOKEN",
+  "pairing_phone": "",
+  "port": 8099,
+  "data_dir": "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data",
+  "auth_dir": "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data/auth"
+}
+```
+
+Copy `whatsapp_bridge/config.native.example.json` to
+`~/.config/whatsapp-bridge/config.json`, replace the token (generate one with
+`openssl rand -hex 32`), and protect it with `chmod 600`. For systemd, see
+`whatsapp_bridge/whatsapp-bridge.service.example`. The service example sets
+`CONFIG_FILE` explicitly. Supported environment overrides are `API_TOKEN`,
+`PAIRING_PHONE`, `PORT`, `DATA_DIR`, and `AUTH_DIR`.
+
+The file is JSON (not YAML). Keep the same `data_dir` when switching between
+the native binary and the container so the WhatsApp SQLite session remains
+available. Never run both against the same database at the same time.
+

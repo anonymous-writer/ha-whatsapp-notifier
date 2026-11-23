@@ -42,6 +42,8 @@ type options struct {
 	APIToken     string `json:"api_token"`
 	PairingPhone string `json:"pairing_phone"`
 	Port         int    `json:"port"`
+	DataDir      string `json:"data_dir"`
+	AuthDir      string `json:"auth_dir"`
 }
 
 type bridgeStatus struct {
@@ -142,7 +144,9 @@ func main() {
 	// WhatsApp session credentials and the SQLite database are private to this process user.
 	syscall.Umask(0o077)
 	opts := readOptions()
-	token := firstNonEmpty(opts.APIToken, os.Getenv("API_TOKEN"))
+	// Values from environment variables override the JSON config file. This
+	// keeps container deployments compatible while making native installs easy.
+	token := firstNonEmpty(os.Getenv("API_TOKEN"), opts.APIToken)
 	if token == "" {
 		log.Fatal("api_token is required; refusing to start without API authentication")
 	}
@@ -155,7 +159,7 @@ func main() {
 		port = envPort
 	}
 
-	dataDir := os.Getenv("DATA_DIR")
+	dataDir := firstNonEmpty(os.Getenv("DATA_DIR"), opts.DataDir)
 	if dataDir == "" {
 		if _, err := os.Stat("/data"); err == nil {
 			dataDir = "/data"
@@ -163,7 +167,7 @@ func main() {
 			dataDir = "./data"
 		}
 	}
-	authDir := os.Getenv("AUTH_DIR")
+	authDir := firstNonEmpty(os.Getenv("AUTH_DIR"), opts.AuthDir)
 	if authDir == "" {
 		authDir = filepath.Join(dataDir, "auth")
 	}
@@ -176,7 +180,7 @@ func main() {
 
 	b := &bridge{
 		token:       token,
-		pairPhone:   digitsOnly(firstNonEmpty(opts.PairingPhone, os.Getenv("PAIRING_PHONE"))),
+		pairPhone:   digitsOnly(firstNonEmpty(os.Getenv("PAIRING_PHONE"), opts.PairingPhone)),
 		forwardFile: filepath.Join(dataDir, "forward.json"),
 		status:      bridgeStatus{Status: "connecting"},
 		forward:     make(map[string]bool),
@@ -232,12 +236,36 @@ func main() {
 
 func readOptions() options {
 	var opts options
-	raw, err := os.ReadFile("/data/options.json")
-	if err == nil {
-		if err := json.Unmarshal(raw, &opts); err != nil {
-			log.Printf("warning: could not parse /data/options.json: %v", err)
+
+	// CONFIG_FILE is explicit and takes precedence. Without it, retain the
+	// Home Assistant add-on path and also support convenient native defaults.
+	configPath := strings.TrimSpace(os.Getenv("CONFIG_FILE"))
+	if configPath == "" {
+		candidates := []string{"/data/options.json"}
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			candidates = append(candidates, filepath.Join(home, ".config", "whatsapp-bridge", "config.json"))
+		}
+		candidates = append(candidates, "/etc/whatsapp-bridge/config.json", "./config.json")
+		for _, candidate := range candidates {
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				configPath = candidate
+				break
+			}
 		}
 	}
+	if configPath == "" {
+		log.Printf("no config file found; using environment variables and defaults")
+		return opts
+	}
+
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		log.Fatalf("read config file %q: %v", configPath, err)
+	}
+	if err := json.Unmarshal(raw, &opts); err != nil {
+		log.Fatalf("parse config file %q: %v", configPath, err)
+	}
+	log.Printf("loaded configuration from %s", configPath)
 	return opts
 }
 
