@@ -13,7 +13,8 @@
     },
     "error": {
       "cannot_connect": "Cannot reach the bridge",
-      "invalid_auth": "Invalid API token"
+      "invalid_auth": "Invalid API token",
+      "invalid_response": "The address responded, but it is not a compatible WhatsApp bridge"
     },
     "abort": {
       "already_configured": "Already configured"

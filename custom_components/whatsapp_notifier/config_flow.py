@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import voluptuous as vol
-from aiohttp import ClientTimeout
+from aiohttp import ClientError, ClientTimeout
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -36,12 +36,18 @@ class WhatsAppConfigFlow(ConfigFlow, domain=DOMAIN):
             token = user_input.get(CONF_TOKEN, "")
             headers = {"Authorization": f"Bearer {token}"} if token else {}
             try:
-                async with async_get_clientsession(self.hass).get(url, headers=headers, timeout=ClientTimeout(total=10)) as r:
-                    if r.status == 401:
+                async with async_get_clientsession(self.hass).get(
+                    url, headers=headers, timeout=ClientTimeout(total=10)
+                ) as response:
+                    if response.status == 401:
                         errors["base"] = "invalid_auth"
+                    elif response.status != 200:
+                        errors["base"] = "invalid_response"
                     else:
-                        r.raise_for_status()
-            except Exception:  # noqa: BLE001
+                        payload = await response.json(content_type=None)
+                        if not isinstance(payload, dict) or not isinstance(payload.get("status"), str):
+                            errors["base"] = "invalid_response"
+            except (ClientError, TimeoutError, ValueError):
                 errors["base"] = "cannot_connect"
             if not errors:
                 await self.async_set_unique_id(f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}")
@@ -54,7 +60,7 @@ class WhatsAppConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         schema = vol.Schema(
             {
-                vol.Required(CONF_HOST, default="homeassistant.local"): str,
+                vol.Required(CONF_HOST, default="whatsapp-bridge"): str,
                 vol.Required(CONF_PORT, default=8099): int,
                 vol.Optional(CONF_TOKEN, default=""): str,
                 vol.Optional(CONF_DEFAULT_CHAT, default=""): str,
