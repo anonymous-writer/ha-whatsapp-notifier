@@ -1,6 +1,0 @@
-host: "127.0.0.1"
-port: "8099"
-api_token: "DEIN_API_TOKEN"
-pairing_phone: ""
-data_dir: "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data"
-auth_dir: "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data/auth"

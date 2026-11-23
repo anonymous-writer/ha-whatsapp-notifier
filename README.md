@@ -385,3 +385,8 @@ Keep the same `data_dir` and `auth_dir` to retain the linked WhatsApp session. T
 ## License
 
 This project is distributed under the MIT License. See [LICENSE](LICENSE).
+
+
+## Project structure
+
+See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for the repository layout and the separation between the Home Assistant integration and Go bridge.
