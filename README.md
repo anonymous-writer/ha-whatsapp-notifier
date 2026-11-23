@@ -588,11 +588,12 @@ Use Conventional Commit messages, for example `feat: add delivery receipts`, `fi
 ## Native configuration file (YAML or JSON)
 
 The native Go bridge accepts YAML (`.yaml`/`.yml`) and JSON configuration files.
-Set `CONFIG_FILE` to the file path. If it is not set, the bridge checks
+Pass the path with `--config /path/to/config.yaml` (or `--config /path/to/config.json`). Alternatively set `CONFIG_FILE`. If neither is set, the bridge checks
 `/data/options.json`, then `~/.config/whatsapp-bridge/config.yaml` (also `.yml`
 and `.json`), the matching paths under `/etc/whatsapp-bridge/`, and finally the
 current directory. Environment variables override config values: `HOST`, `PORT`,
-`API_TOKEN`, `PAIRING_PHONE`, `DATA_DIR`, and `AUTH_DIR`.
+`API_TOKEN`, `PAIRING_PHONE`, `DATA_DIR`, and `AUTH_DIR`. Run
+`whatsapp-bridge-linux --help` to display all options and environment variables.
 
 Example `~/.config/whatsapp-bridge/config.yaml`:
 
@@ -613,7 +614,7 @@ WhatsApp session. Never run native and container versions against the same SQLit
 database at the same time.
 
 For systemd, see `whatsapp_bridge/whatsapp-bridge.service.example`; it sets
-`CONFIG_FILE` explicitly. The matching sample is
+`CONFIG_FILE` explicitly. Example: `~/.local/bin/whatsapp-bridge-linux --config /home/pi/.config/whatsapp-bridge/config.yaml`. The matching sample is
 `whatsapp_bridge/config.native.example.yaml`.
 
 the native binary and the container so the WhatsApp SQLite session remains

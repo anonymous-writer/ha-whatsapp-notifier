@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -172,9 +173,10 @@ type bridge struct {
 }
 
 func main() {
+	configPath := parseCommandLine()
 	// WhatsApp session credentials and the SQLite database are private to this process user.
 	syscall.Umask(0o077)
-	opts := readOptions()
+	opts := readOptions(configPath)
 	// Values from environment variables override the YAML/JSON config file. This
 	// keeps container deployments compatible while making native installs easy.
 	token := firstNonEmpty(os.Getenv("API_TOKEN"), opts.APIToken)
@@ -266,12 +268,45 @@ func main() {
 	}
 }
 
-func readOptions() options {
+// parseCommandLine handles startup options. The config file can be selected
+// with --config; individual settings can be overridden with environment variables.
+func parseCommandLine() string {
+	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to YAML or JSON configuration file (overrides CONFIG_FILE)")
+	fs.Usage = func() {
+		fmt.Fprintf(fs.Output(), "Usage: %s [options]\n\n", os.Args[0])
+		fmt.Fprintln(fs.Output(), "Options:")
+		fs.PrintDefaults()
+		fmt.Fprintln(fs.Output(), "\nConfiguration environment variables (override file values):")
+		fmt.Fprintln(fs.Output(), "  HOST           Listen address (default: 0.0.0.0)")
+		fmt.Fprintln(fs.Output(), "  PORT           Listen port (default: 8099)")
+		fmt.Fprintln(fs.Output(), "  API_TOKEN      API authentication token (required)")
+		fmt.Fprintln(fs.Output(), "  PAIRING_PHONE  Phone number for WhatsApp pairing")
+		fmt.Fprintln(fs.Output(), "  DATA_DIR       Directory for bridge data")
+		fmt.Fprintln(fs.Output(), "  AUTH_DIR       Directory for WhatsApp session data")
+		fmt.Fprintln(fs.Output(), "  CONFIG_FILE    Config path if --config is not supplied")
+		fmt.Fprintln(fs.Output(), "\nPrecedence: command-line --config > CONFIG_FILE > auto-detected config; environment values override config file values.")
+	}
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		log.Fatal(err)
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(fs.Output(), "unexpected positional arguments: %s\n", strings.Join(fs.Args(), " "))
+		fs.Usage()
+		os.Exit(2)
+	}
+	return *configPath
+}
+
+func readOptions(cliConfigPath string) options {
 	var opts options
 
 	// CONFIG_FILE is explicit and takes precedence. Without it, retain the
 	// Home Assistant add-on JSON path and support native YAML/JSON defaults.
-	configPath := strings.TrimSpace(os.Getenv("CONFIG_FILE"))
+	configPath := strings.TrimSpace(cliConfigPath)
+	if configPath == "" {
+		configPath = strings.TrimSpace(os.Getenv("CONFIG_FILE"))
+	}
 	if configPath == "" {
 		candidates := []string{"/data/options.json"}
 		if home, err := os.UserHomeDir(); err == nil && home != "" {
