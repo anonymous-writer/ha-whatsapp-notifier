@@ -34,53 +34,96 @@ The first two ask for a reply. A reply to the message can stop the reminder, see
 
 ### Install
 
-The project has two components: the Home Assistant integration and the Go WhatsApp bridge. Choose the bridge deployment that matches your Home Assistant installation. The bridge exposes the same authenticated HTTP/WebSocket API in every deployment.
+#### 1. Install and run the native Go bridge
 
-#### Home Assistant OS / Supervised (recommended)
+The bridge is a standalone Go application. It is not a Home Assistant add-on and does not need a separate external server. On Linux, install the prebuilt binary for your architecture from the project's GitHub Releases.
 
-1. Add this repository in **Settings → Apps → App store → Repositories**:
-   `https://github.com/anonymous-writer/ha-whatsapp-notifier`
-2. Install **WhatsApp Bridge** and open its configuration. Set a strong `api_token` (for example, generate one with `openssl rand -hex 32`). `pairing_phone` is optional; leave it empty to use QR pairing.
-3. Start the app. Its `/data` directory is persistent and contains the linked-device session. Do not delete it when updating or reinstalling.
-4. Open the app's **Web UI** and scan the QR code with WhatsApp → Linked devices → Link a device.
-5. Install the **WhatsApp Notifier** integration through HACS (or copy `custom_components/whatsapp_notifier` into your HA config folder), then restart Home Assistant.
-6. Add the integration. Use host `whatsapp-bridge`, port `8099`, and the same API token configured in the app.
-
-#### Home Assistant Container
-
-Run the bridge as a separate container on the same Docker network as Home Assistant. Persist `/data` and set `API_TOKEN` (required). For example:
+For a Raspberry Pi running a 64-bit OS, use the **Linux ARM64** release asset. Install it, for example, as:
 
 ```bash
-docker run -d \
-  --name whatsapp-bridge \
-  --restart unless-stopped \
-  --network <your-ha-network> \
-  -p 8099:8099 \
-  -e API_TOKEN="YOUR_RANDOM_64_CHARACTER_TOKEN" \
-  -v whatsapp-bridge-data:/data \
-  ghcr.io/anonymous-writer/ha-whatsapp-notifier:latest
+mkdir -p ~/.local/bin
+# Copy the downloaded whatsapp-bridge-linux binary to:
+# /home/pi/.local/bin/whatsapp-bridge-linux
+chmod +x /home/pi/.local/bin/whatsapp-bridge-linux
 ```
 
-If both containers share a Docker network, configure the integration with host `whatsapp-bridge` and port `8099`. Otherwise use the bridge host's reachable IP address. Open `http://BRIDGE_HOST:8099/qr?token=YOUR_TOKEN` to pair the device.
-
-#### Home Assistant Core / native Linux
-
-Download the matching Linux binary (ARM64 for a 64-bit Raspberry Pi), create a JSON or YAML config file, and run it as a systemd service. Example `config.yaml`:
+Create a configuration file, for example `~/.config/whatsapp-bridge/config.json` or `config.yaml`. Both JSON and YAML are supported:
 
 ```yaml
 host: "127.0.0.1"
 port: "8099"
 api_token: "YOUR_RANDOM_64_CHARACTER_TOKEN"
 pairing_phone: ""
-data_dir: "/home/homeassistant/.local/share/whatsapp-bridge/data"
-auth_dir: "/home/homeassistant/.local/share/whatsapp-bridge/data/auth"
+data_dir: "/home/pi/.local/share/whatsapp-bridge/data"
+auth_dir: "/home/pi/.local/share/whatsapp-bridge/data/auth"
 ```
 
-Start with `whatsapp-bridge-linux --config /path/to/config.yaml`. Protect the config file (`chmod 600`) and keep `data_dir` and `auth_dir` stable across restarts and upgrades. The session is stored in SQLite under `auth_dir`; do not delete it or run two bridge instances against the same database. Open `http://BRIDGE_HOST:8099/qr?token=YOUR_TOKEN` to pair.
+Generate a token with `openssl rand -hex 32` and protect the file:
 
-#### Install the integration
+```bash
+chmod 600 ~/.config/whatsapp-bridge/config.json
+```
 
-In HACS, open **Integrations → Custom repositories**, add this repository URL with category **Integration**, install **WhatsApp Notifier**, and restart Home Assistant. Alternatively, copy `custom_components/whatsapp_notifier` into your Home Assistant `custom_components` directory. Then go to **Settings → Devices & services → Add integration → WhatsApp Notifier**. The host, port and token must point to the bridge; the default host suggestion `whatsapp-bridge` is suitable for the Home Assistant App deployment.
+Start the bridge manually:
+
+```bash
+~/.local/bin/whatsapp-bridge-linux --config ~/.config/whatsapp-bridge/config.json
+```
+
+Use `whatsapp-bridge-linux --help` to see the available command-line options and environment variables. The `--config` command-line option takes precedence over `CONFIG_FILE`. Environment variables (`HOST`, `PORT`, `API_TOKEN`, `PAIRING_PHONE`, `DATA_DIR`, and `AUTH_DIR`) override values from the configuration file.
+
+**Run it as a systemd user service (recommended on a Raspberry Pi):**
+
+Create `~/.config/systemd/user/whatsapp-bridge.service`:
+
+```ini
+[Unit]
+Description=WhatsApp Bridge (Go)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h
+ExecStart=%h/.local/bin/whatsapp-bridge-linux --config %h/.config/whatsapp-bridge/config.json
+Restart=always
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
+```
+
+Enable and start it:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now whatsapp-bridge.service
+systemctl --user status whatsapp-bridge.service
+```
+
+Follow the logs with:
+
+```bash
+journalctl --user -u whatsapp-bridge.service -f
+```
+
+To start the user service automatically at boot even when the user is not logged in, enable lingering for that account:
+
+```bash
+sudo loginctl enable-linger "$USER"
+```
+
+**Important:** Keep `data_dir` and `auth_dir` stable across upgrades and restarts. The WhatsApp linked-device session is stored in the SQLite database under `auth_dir`. If the bridge reports `pairing_required` after a restart, verify that it is using the same `auth_dir` and that the service user can read and write it before pairing again. Do not delete the authentication database. Never run the native binary and a container instance against the same SQLite database at the same time.
+
+#### 3. Integration
+
+1. In HACS, open **Integrations** > ⋮ > **Custom repositories**. Add `https://github.com/anonymous-writer/ha-whatsapp-notifier` and select **Integration**. Download **WhatsApp Notifier**, then restart Home Assistant. (Once the repository is available in the HACS default catalog, this manual repository step will no longer be needed.)
+2. Open **Settings > Devices & services > Add integration** and select **WhatsApp Notifier**. Enter the bridge hostname or IP address (without a port), port `8099`, and the API token configured in your existing bridge. The setup checks the connection and verifies that the endpoint speaks the expected bridge API before saving. The default chat ID is optional and can be added later. You can also paste a plain `http://` or `https://` base address without a path; the port remains a separate field.
+
+Running Home Assistant Container/Core? Run the bridge separately on the same host or on a reachable Linux machine, using the native binary or the Docker image. Configure the integration with the bridge host, port, and matching API token.
 
 ### Finding chat IDs
 
@@ -343,7 +386,22 @@ Keep the same `data_dir` and `auth_dir` to retain the linked WhatsApp session. T
 
 This project is distributed under the MIT License. See [LICENSE](LICENSE).
 
+## Integration setup (0.5.2)
 
-## Project structure
+The Home Assistant integration connects to the existing native WhatsApp Bridge; it does not install, replace, or modify that bridge.
 
-See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for the repository layout and the separation between the Home Assistant integration and Go bridge.
+1. Install/update **WhatsApp Notifier** through HACS (or copy `custom_components/whatsapp_notifier` into your Home Assistant `custom_components` directory).
+2. Restart Home Assistant.
+3. Add **WhatsApp Notifier** under **Settings → Devices & services → Add integration**.
+4. Enter the bridge hostname or IP, port (normally `8099`), and the API token configured on the bridge.
+5. The integration checks the `/status` endpoint and token before saving.
+
+Use the integration's **Reconfigure** action to change the bridge connection later. Existing chat subentries are retained.
+
+### Adding chats
+
+When the bridge is connected to WhatsApp, the integration can load joined WhatsApp groups from the bridge's existing `GET /groups` endpoint. Select a group to add it without copying its JID. Individual contacts are not currently exposed by the bridge API, so add individual phone numbers manually using **Enter a chat manually instead**. Manual group IDs remain supported too.
+
+### Diagnostics
+
+The Home Assistant diagnostics download includes bridge status and integration settings, but excludes the API token. Review diagnostic files before sharing them publicly.

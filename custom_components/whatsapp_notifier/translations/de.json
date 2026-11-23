@@ -1,0 +1,169 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "WhatsApp-Bridge",
+        "data": {
+          "host": "Bridge-Host",
+          "port": "Port",
+          "token": "API-Token",
+          "default_chat_id": "Standard-Chat-ID"
+        },
+        "data_description": {
+          "host": "Hostname oder IP-Adresse deiner vorhandenen WhatsApp-Bridge, ohne Port. Beispiel: homeassistant.local oder 192.168.1.20.",
+          "port": "HTTP-API-Port der Bridge, normalerweise 8099.",
+          "token": "API-Token, das in deiner vorhandenen Bridge konfiguriert ist. Nur leer lassen, wenn die Authentifizierung deaktiviert ist.",
+          "default_chat_id": "Optional. Wird verwendet, wenn beim Senden kein Empfänger angegeben wird. Chats kannst du später hinzufügen."
+        }
+      },
+      "reconfigure": {
+        "title": "WhatsApp-Bridge neu konfigurieren",
+        "data": {
+          "host": "Bridge-Host",
+          "port": "Port",
+          "token": "API-Token"
+        },
+        "data_description": {
+          "host": "Hostname oder IP-Adresse deiner vorhandenen nativen Bridge.",
+          "port": "HTTP-API-Port, normalerweise 8099.",
+          "token": "API-Token deiner vorhandenen Bridge."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Bridge nicht erreichbar",
+      "invalid_auth": "API-Token ist ungültig",
+      "invalid_host": "Bitte einen Hostnamen, eine IP-Adresse oder eine einfache HTTP-Basisadresse ohne Pfad eingeben.",
+      "invalid_port": "Der Port muss zwischen 1 und 65535 liegen.",
+      "incompatible_bridge": "Der Server antwortet, ist aber keine kompatible WhatsApp-Bridge.",
+      "bridge_error": "Die Bridge meldet einen Serverfehler. Bitte Bridge-Protokoll prüfen."
+    },
+    "abort": {
+      "already_configured": "Bereits eingerichtet",
+      "group_not_available": "Diese Gruppe ist nicht mehr verfügbar. Bitte Gruppenliste neu laden."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "default_chat_id": "Default chat ID"
+        }
+      }
+    }
+  },
+  "entity": {
+    "notify": {
+      "notify": {
+        "name": "Message"
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "connected": "Connected",
+          "connecting": "Connecting",
+          "pairing_required": "Pairing required",
+          "logged_out": "Logged out",
+          "error": "Error",
+          "bridge_unreachable": "Bridge unreachable"
+        }
+      },
+      "last_message": {
+        "name": "Last message"
+      }
+    },
+    "button": {
+      "test_message": {
+        "name": "Send test message"
+      }
+    }
+  },
+  "services": {
+    "send_message": {
+      "name": "Send message",
+      "description": "Send a WhatsApp message; chat_id overrides the default chat.",
+      "fields": {
+        "message": {
+          "name": "Message",
+          "description": "Text to send"
+        },
+        "chat_id": {
+          "name": "Chat ID",
+          "description": "Phone number or group ID (default chat if empty)"
+        },
+        "image": {
+          "name": "Image",
+          "description": "Path of a PNG/JPEG file to send; the message becomes the caption. Must be in an allowed folder such as /config/www (max 5 MB)"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "chat": {
+      "entry_type": "Chat",
+      "initiate_flow": {
+        "user": "Add chat"
+      },
+      "step": {
+        "user": {
+          "title": "Add chat",
+          "data": {
+            "name": "Name",
+            "chat_id": "Chat ID",
+            "only_replies": "Only replies to messages sent by this bridge"
+          },
+          "data_description": {
+            "chat_id": "Phone number with country code (31612345678) or group ID (...@g.us)",
+            "only_replies": "The Last message sensor only updates when someone uses WhatsApp reply on a message the bridge sent"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit chat",
+          "data": {
+            "name": "Name",
+            "chat_id": "Chat ID",
+            "only_replies": "Only replies to messages sent by this bridge"
+          },
+          "data_description": {
+            "chat_id": "Phone number with country code (31612345678) or group ID (...@g.us)",
+            "only_replies": "The Last message sensor only updates when someone uses WhatsApp reply on a message the bridge sent"
+          }
+        },
+        "select_group": {
+          "title": "WhatsApp-Gruppe auswählen",
+          "data": {
+            "chat_id": "Verfügbare Gruppen",
+            "only_replies": "Nur Antworten auf Nachrichten dieser Bridge",
+            "manual_entry": "Chat stattdessen manuell eingeben"
+          },
+          "data_description": {
+            "chat_id": "Gruppen werden vom verbundenen WhatsApp-Konto geladen. Einzelkontakte stellt die aktuelle Bridge-API nicht bereit.",
+            "manual_entry": "Verwenden, um eine Telefonnummer oder Gruppen-ID manuell einzutragen."
+          }
+        },
+        "manual": {
+          "title": "Chat manuell hinzufügen",
+          "data": {
+            "name": "Name",
+            "chat_id": "Chat-ID",
+            "only_replies": "Nur Antworten auf Nachrichten dieser Bridge"
+          },
+          "data_description": {
+            "chat_id": "Telefonnummer mit Ländervorwahl (491701234567) oder Gruppen-ID (...@g.us)",
+            "only_replies": "Der Sensor für letzte Nachrichten wird nur aktualisiert, wenn jemand mit WhatsApp auf eine von der Bridge gesendete Nachricht antwortet."
+          }
+        }
+      },
+      "error": {
+        "invalid_chat_id": "Invalid chat ID"
+      },
+      "abort": {
+        "already_configured": "This chat is already added",
+        "reconfigure_successful": "Saved"
+      }
+    }
+  }
+}

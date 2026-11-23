@@ -2,29 +2,53 @@
   "config": {
     "step": {
       "user": {
-        "title": "WhatsApp-bridge",
+        "title": "WhatsApp bridge",
         "data": {
-          "host": "Bridge-host",
-          "port": "Poort",
-          "token": "API-token",
-          "default_chat_id": "Standaard chat-ID"
+          "host": "Bridge host",
+          "port": "Port",
+          "token": "API token",
+          "default_chat_id": "Default chat ID"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of your existing WhatsApp bridge. Do not include the port. Example: homeassistant.local or 192.168.1.20.",
+          "port": "HTTP API port of the bridge. The default is 8099.",
+          "token": "The API token configured in your existing bridge. Leave empty only if bridge authentication is disabled.",
+          "default_chat_id": "Optional. Used when a send action does not specify a recipient. You can configure chats later."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure WhatsApp bridge",
+        "data": {
+          "host": "Bridge host",
+          "port": "Port",
+          "token": "API token"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of your existing native bridge.",
+          "port": "HTTP API port, usually 8099.",
+          "token": "API token configured in your existing bridge."
         }
       }
     },
     "error": {
-      "cannot_connect": "Kan de bridge niet bereiken",
-      "invalid_auth": "Ongeldig API-token"
+      "cannot_connect": "Cannot reach the bridge",
+      "invalid_auth": "Invalid API token",
+      "invalid_host": "Enter a hostname, IP address, or plain http(s) base URL without a path.",
+      "invalid_port": "Port must be between 1 and 65535.",
+      "incompatible_bridge": "A server responded, but it does not look like a compatible WhatsApp bridge. Check the host and port.",
+      "bridge_error": "The bridge returned a server error. Check the bridge logs."
     },
     "abort": {
-      "already_configured": "Al geconfigureerd"
+      "already_configured": "Already configured",
+      "group_not_available": "This group is no longer available. Refresh the group list and try again."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Opties",
+        "title": "Options",
         "data": {
-          "default_chat_id": "Standaard chat-ID"
+          "default_chat_id": "Default chat ID"
         }
       }
     }
@@ -32,47 +56,47 @@
   "entity": {
     "notify": {
       "notify": {
-        "name": "Bericht"
+        "name": "Message"
       }
     },
     "sensor": {
       "status": {
         "name": "Status",
         "state": {
-          "connected": "Verbonden",
-          "connecting": "Verbinden",
-          "pairing_required": "Koppelen vereist",
-          "logged_out": "Uitgelogd",
-          "error": "Fout",
-          "bridge_unreachable": "Bridge onbereikbaar"
+          "connected": "Connected",
+          "connecting": "Connecting",
+          "pairing_required": "Pairing required",
+          "logged_out": "Logged out",
+          "error": "Error",
+          "bridge_unreachable": "Bridge unreachable"
         }
       },
       "last_message": {
-        "name": "Laatste bericht"
+        "name": "Last message"
       }
     },
     "button": {
       "test_message": {
-        "name": "Testbericht versturen"
+        "name": "Send test message"
       }
     }
   },
   "services": {
     "send_message": {
-      "name": "Bericht versturen",
-      "description": "Stuur een WhatsApp-bericht; chat_id vervangt de standaardchat.",
+      "name": "Send message",
+      "description": "Send a WhatsApp message; chat_id overrides the default chat.",
       "fields": {
         "message": {
-          "name": "Bericht",
-          "description": "Te versturen tekst"
+          "name": "Message",
+          "description": "Text to send"
         },
         "chat_id": {
-          "name": "Chat-ID",
-          "description": "Telefoonnummer of groeps-ID (standaardchat indien leeg)"
+          "name": "Chat ID",
+          "description": "Phone number or group ID (default chat if empty)"
         },
         "image": {
-          "name": "Afbeelding",
-          "description": "Pad naar een PNG/JPEG-bestand; het bericht wordt het bijschrift. Moet in een toegestane map staan, zoals /config/www (max 5 MB)"
+          "name": "Image",
+          "description": "Path of a PNG/JPEG file to send; the message becomes the caption. Must be in an allowed folder such as /config/www (max 5 MB)"
         }
       }
     }
@@ -81,40 +105,64 @@
     "chat": {
       "entry_type": "Chat",
       "initiate_flow": {
-        "user": "Chat toevoegen"
+        "user": "Add chat"
       },
       "step": {
         "user": {
-          "title": "Chat toevoegen",
+          "title": "Add chat",
           "data": {
-            "name": "Naam",
-            "chat_id": "Chat-ID",
-            "only_replies": "Alleen antwoorden op berichten van deze bridge"
+            "name": "Name",
+            "chat_id": "Chat ID",
+            "only_replies": "Only replies to messages sent by this bridge"
           },
           "data_description": {
-            "chat_id": "Telefoonnummer met landcode (31612345678) of groeps-ID (...@g.us)",
-            "only_replies": "De sensor Laatste bericht wordt alleen bijgewerkt als iemand in WhatsApp beantwoorden gebruikt op een bericht dat de bridge stuurde"
+            "chat_id": "Phone number with country code (31612345678) or group ID (...@g.us)",
+            "only_replies": "The Last message sensor only updates when someone uses WhatsApp reply on a message the bridge sent"
           }
         },
         "reconfigure": {
-          "title": "Chat wijzigen",
+          "title": "Edit chat",
           "data": {
-            "name": "Naam",
-            "chat_id": "Chat-ID",
-            "only_replies": "Alleen antwoorden op berichten van deze bridge"
+            "name": "Name",
+            "chat_id": "Chat ID",
+            "only_replies": "Only replies to messages sent by this bridge"
           },
           "data_description": {
-            "chat_id": "Telefoonnummer met landcode (31612345678) of groeps-ID (...@g.us)",
-            "only_replies": "De sensor Laatste bericht wordt alleen bijgewerkt als iemand in WhatsApp beantwoorden gebruikt op een bericht dat de bridge stuurde"
+            "chat_id": "Phone number with country code (31612345678) or group ID (...@g.us)",
+            "only_replies": "The Last message sensor only updates when someone uses WhatsApp reply on a message the bridge sent"
+          }
+        },
+        "select_group": {
+          "title": "Select WhatsApp group",
+          "data": {
+            "chat_id": "Available groups",
+            "only_replies": "Only replies to messages sent by this bridge",
+            "manual_entry": "Enter a chat manually instead"
+          },
+          "data_description": {
+            "chat_id": "Groups are loaded from your connected WhatsApp account. Contacts are not exposed by the current bridge API.",
+            "manual_entry": "Use this if you want to add an individual phone number or a group ID manually."
+          }
+        },
+        "manual": {
+          "title": "Add chat manually",
+          "data": {
+            "name": "Name",
+            "chat_id": "Chat ID",
+            "only_replies": "Only replies to messages sent by this bridge"
+          },
+          "data_description": {
+            "chat_id": "Phone number with country code (31612345678) or group ID (...@g.us)",
+            "only_replies": "The Last message sensor only updates when someone uses WhatsApp reply on a message the bridge sent."
           }
         }
       },
       "error": {
-        "invalid_chat_id": "Ongeldig chat-ID"
+        "invalid_chat_id": "Invalid chat ID"
       },
       "abort": {
-        "already_configured": "Deze chat is al toegevoegd",
-        "reconfigure_successful": "Opgeslagen"
+        "already_configured": "This chat is already added",
+        "reconfigure_successful": "Saved"
       }
     }
   }
