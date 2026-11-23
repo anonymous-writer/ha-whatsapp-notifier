@@ -1,4 +1,4 @@
-name: Build native Linux ARM64 binary
+name: Build native Linux binaries
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ permissions:
 jobs:
   test:
     name: Test Go bridge
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: whatsapp_bridge
@@ -49,6 +49,60 @@ jobs:
 
       - name: Run go vet
         run: go vet ./...
+
+  build-amd64:
+    name: Build native Linux AMD64 binary
+    needs: test
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: whatsapp_bridge
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: whatsapp_bridge/go.mod
+          cache: true
+
+      - name: Resolve Go modules and generate go.sum
+        run: go mod tidy
+
+      - name: Install static AMD64 C toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
+
+      - name: Build standalone AMD64 binary (native runner, CGO enabled)
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          CC=musl-gcc go build -trimpath \
+            -ldflags="-s -w -linkmode external -extldflags=-static" \
+            -o dist/whatsapp-bridge-linux-amd64 .
+          if readelf -l dist/whatsapp-bridge-linux-amd64 | grep -q INTERP; then
+            echo "::error::The AMD64 binary is not statically linked"
+            exit 1
+          fi
+          tar -czf dist/whatsapp-bridge-linux-amd64.tar.gz -C dist whatsapp-bridge-linux-amd64
+
+      - name: Upload standalone AMD64 artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: whatsapp-bridge-linux-amd64
+          path: |
+            whatsapp_bridge/dist/whatsapp-bridge-linux-amd64
+            whatsapp_bridge/dist/whatsapp-bridge-linux-amd64.tar.gz
+          if-no-files-found: error
+          retention-days: 30
 
   build-arm64:
     name: Build native Linux ARM64 binary
@@ -88,18 +142,11 @@ jobs:
           CC=musl-gcc go build -trimpath \
             -ldflags="-s -w -linkmode external -extldflags=-static" \
             -o dist/whatsapp-bridge-linux-arm64 .
-
-          # Fail the workflow if the binary accidentally depends on glibc.
           if readelf -l dist/whatsapp-bridge-linux-arm64 | grep -q INTERP; then
             echo "::error::The ARM64 binary is not statically linked"
             exit 1
           fi
-
-      - name: Package binary
-        run: |
           tar -czf dist/whatsapp-bridge-linux-arm64.tar.gz -C dist whatsapp-bridge-linux-arm64
-          cd dist
-          sha256sum whatsapp-bridge-linux-arm64 whatsapp-bridge-linux-arm64.tar.gz > SHA256SUMS
 
       - name: Upload standalone ARM64 artifact
         uses: actions/upload-artifact@v7
@@ -108,40 +155,43 @@ jobs:
           path: |
             whatsapp_bridge/dist/whatsapp-bridge-linux-arm64
             whatsapp_bridge/dist/whatsapp-bridge-linux-arm64.tar.gz
-            whatsapp_bridge/dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 30
 
   publish-release-assets:
-    name: Attach ARM64 binary to GitHub Release
+    name: Attach AMD64 and ARM64 binaries to GitHub Release
     if: github.event_name == 'release' || inputs.release_tag != ''
-    needs: build-arm64
+    needs: [build-amd64, build-arm64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Download AMD64 artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: whatsapp-bridge-linux-amd64
+          path: dist
+
       - name: Download ARM64 artifact
         uses: actions/download-artifact@v8
         with:
           name: whatsapp-bridge-linux-arm64
           path: dist
 
-      - name: Generate GitHub release notes
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
-          GH_REPO: ${{ github.repository }}
+      - name: Generate checksums
         run: |
-          gh api --method POST "repos/${GH_REPO}/releases/generate-notes" \
-            -f tag_name="$RELEASE_TAG" --jq '.body' > release-notes.md
-          gh release edit "$RELEASE_TAG" --notes-file release-notes.md
+          cd dist
+          sha256sum whatsapp-bridge-linux-amd64 whatsapp-bridge-linux-amd64.tar.gz \
+            whatsapp-bridge-linux-arm64 whatsapp-bridge-linux-arm64.tar.gz > SHA256SUMS
 
-      - name: Attach ARM64 binary and checksums
+      - name: Attach binaries and checksums to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: |
           gh release upload "$RELEASE_TAG" \
+            dist/whatsapp-bridge-linux-amd64 \
+            dist/whatsapp-bridge-linux-amd64.tar.gz \
             dist/whatsapp-bridge-linux-arm64 \
             dist/whatsapp-bridge-linux-arm64.tar.gz \
             dist/SHA256SUMS --clobber
