@@ -41,8 +41,8 @@ jobs:
           go-version-file: whatsapp_bridge/go.mod
           cache: true
 
-      - name: Resolve Go modules
-        run: go mod download
+      - name: Resolve Go modules and generate go.sum
+        run: go mod tidy
 
       - name: Run tests
         run: go test ./...
@@ -69,8 +69,8 @@ jobs:
           go-version-file: whatsapp_bridge/go.mod
           cache: true
 
-      - name: Resolve Go modules
-        run: go mod download
+      - name: Resolve Go modules and generate go.sum
+        run: go mod tidy
 
       - name: Install static ARM64 C toolchain
         run: |
