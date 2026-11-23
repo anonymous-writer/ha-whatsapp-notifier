@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,6 +31,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -39,11 +41,40 @@ const (
 )
 
 type options struct {
-	APIToken     string `json:"api_token"`
-	PairingPhone string `json:"pairing_phone"`
-	Port         int    `json:"port"`
-	DataDir      string `json:"data_dir"`
-	AuthDir      string `json:"auth_dir"`
+	Host         string `json:"host" yaml:"host"`
+	APIToken     string `json:"api_token" yaml:"api_token"`
+	PairingPhone string `json:"pairing_phone" yaml:"pairing_phone"`
+	Port         string `json:"port" yaml:"port"`
+	DataDir      string `json:"data_dir" yaml:"data_dir"`
+	AuthDir      string `json:"auth_dir" yaml:"auth_dir"`
+}
+
+// UnmarshalJSON accepts both numeric and quoted port values for compatibility
+// with existing Home Assistant options.json files and native YAML configs.
+func (o *options) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Host         string          `json:"host"`
+		APIToken     string          `json:"api_token"`
+		PairingPhone string          `json:"pairing_phone"`
+		Port         json.RawMessage `json:"port"`
+		DataDir      string          `json:"data_dir"`
+		AuthDir      string          `json:"auth_dir"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	o.Host, o.APIToken, o.PairingPhone = raw.Host, raw.APIToken, raw.PairingPhone
+	o.DataDir, o.AuthDir = raw.DataDir, raw.AuthDir
+	if len(raw.Port) > 0 {
+		if err := json.Unmarshal(raw.Port, &o.Port); err != nil {
+			var number int
+			if numberErr := json.Unmarshal(raw.Port, &number); numberErr != nil {
+				return err
+			}
+			o.Port = fmt.Sprint(number)
+		}
+	}
+	return nil
 }
 
 type bridgeStatus struct {
@@ -144,19 +175,20 @@ func main() {
 	// WhatsApp session credentials and the SQLite database are private to this process user.
 	syscall.Umask(0o077)
 	opts := readOptions()
-	// Values from environment variables override the JSON config file. This
+	// Values from environment variables override the YAML/JSON config file. This
 	// keeps container deployments compatible while making native installs easy.
 	token := firstNonEmpty(os.Getenv("API_TOKEN"), opts.APIToken)
 	if token == "" {
 		log.Fatal("api_token is required; refusing to start without API authentication")
 	}
 
-	port := defaultPort
-	if opts.Port > 0 {
-		port = fmt.Sprint(opts.Port)
-	}
+	port := firstNonEmpty(opts.Port, defaultPort)
 	if envPort := os.Getenv("PORT"); envPort != "" {
 		port = envPort
+	}
+	host := firstNonEmpty(opts.Host, "0.0.0.0")
+	if envHost := os.Getenv("HOST"); envHost != "" {
+		host = envHost
 	}
 
 	dataDir := firstNonEmpty(os.Getenv("DATA_DIR"), opts.DataDir)
@@ -207,13 +239,13 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:              ":" + port,
+		Addr:              net.JoinHostPort(strings.Trim(host, "[]"), port),
 		Handler:           b.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
 	go func() {
-		log.Printf("Go WhatsApp bridge listening on :%s", port)
+		log.Printf("Go WhatsApp bridge listening on %s", net.JoinHostPort(strings.Trim(host, "[]"), port))
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("HTTP server: %v", err)
 		}
@@ -238,14 +270,18 @@ func readOptions() options {
 	var opts options
 
 	// CONFIG_FILE is explicit and takes precedence. Without it, retain the
-	// Home Assistant add-on path and also support convenient native defaults.
+	// Home Assistant add-on JSON path and support native YAML/JSON defaults.
 	configPath := strings.TrimSpace(os.Getenv("CONFIG_FILE"))
 	if configPath == "" {
 		candidates := []string{"/data/options.json"}
 		if home, err := os.UserHomeDir(); err == nil && home != "" {
-			candidates = append(candidates, filepath.Join(home, ".config", "whatsapp-bridge", "config.json"))
+			candidates = append(candidates,
+				filepath.Join(home, ".config", "whatsapp-bridge", "config.yaml"),
+				filepath.Join(home, ".config", "whatsapp-bridge", "config.yml"),
+				filepath.Join(home, ".config", "whatsapp-bridge", "config.json"),
+			)
 		}
-		candidates = append(candidates, "/etc/whatsapp-bridge/config.json", "./config.json")
+		candidates = append(candidates, "/etc/whatsapp-bridge/config.yaml", "/etc/whatsapp-bridge/config.yml", "/etc/whatsapp-bridge/config.json", "./config.yaml", "./config.yml", "./config.json")
 		for _, candidate := range candidates {
 			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 				configPath = candidate
@@ -262,8 +298,8 @@ func readOptions() options {
 	if err != nil {
 		log.Fatalf("read config file %q: %v", configPath, err)
 	}
-	if err := json.Unmarshal(raw, &opts); err != nil {
-		log.Fatalf("parse config file %q: %v", configPath, err)
+	if err := yaml.Unmarshal(raw, &opts); err != nil {
+		log.Fatalf("parse YAML/JSON config file %q: %v", configPath, err)
 	}
 	log.Printf("loaded configuration from %s", configPath)
 	return opts

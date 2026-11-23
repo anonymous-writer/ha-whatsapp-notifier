@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/Pods/Home-Assistant/whatsapp-bridge
-Environment=CONFIG_FILE=%h/.config/whatsapp-bridge/config.json
+Environment=CONFIG_FILE=%h/.config/whatsapp-bridge/config.yaml
 ExecStart=%h/.local/bin/whatsapp-bridge-linux
 Restart=always
 RestartSec=10

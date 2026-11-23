@@ -585,33 +585,37 @@ Create a fine-grained PAT or GitHub App token with repository contents (read/wri
 Use Conventional Commit messages, for example `feat: add delivery receipts`, `fix: reconnect after timeout`, or `docs: clarify pairing setup`.
 
 
-## Native configuration file (JSON)
+## Native configuration file (YAML or JSON)
 
-The native Go binary can load a JSON configuration file. Set `CONFIG_FILE` to its
-path. If it is not set, the bridge checks `/data/options.json`, then
-`~/.config/whatsapp-bridge/config.json`, `/etc/whatsapp-bridge/config.json`,
-and finally `./config.json`. Environment variables override values from JSON.
+The native Go bridge accepts YAML (`.yaml`/`.yml`) and JSON configuration files.
+Set `CONFIG_FILE` to the file path. If it is not set, the bridge checks
+`/data/options.json`, then `~/.config/whatsapp-bridge/config.yaml` (also `.yml`
+and `.json`), the matching paths under `/etc/whatsapp-bridge/`, and finally the
+current directory. Environment variables override config values: `HOST`, `PORT`,
+`API_TOKEN`, `PAIRING_PHONE`, `DATA_DIR`, and `AUTH_DIR`.
 
-Example for a native Raspberry Pi installation:
+Example `~/.config/whatsapp-bridge/config.yaml`:
 
-```json
-{
-  "api_token": "YOUR_RANDOM_64_CHARACTER_TOKEN",
-  "pairing_phone": "",
-  "port": 8099,
-  "data_dir": "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data",
-  "auth_dir": "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data/auth"
-}
+```yaml
+host: "127.0.0.1"
+port: "8099"
+api_token: "YOUR_RANDOM_64_CHARACTER_TOKEN"
+pairing_phone: ""
+data_dir: "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data"
+auth_dir: "/home/pi/Pods/Home-Assistant/whatsapp-bridge/data/auth"
 ```
 
-Copy `whatsapp_bridge/config.native.example.json` to
-`~/.config/whatsapp-bridge/config.json`, replace the token (generate one with
-`openssl rand -hex 32`), and protect it with `chmod 600`. For systemd, see
-`whatsapp_bridge/whatsapp-bridge.service.example`. The service example sets
-`CONFIG_FILE` explicitly. Supported environment overrides are `API_TOKEN`,
-`PAIRING_PHONE`, `PORT`, `DATA_DIR`, and `AUTH_DIR`.
+Generate a token with `openssl rand -hex 32` and protect the file with
+`chmod 600`. `host: "127.0.0.1"` only accepts connections from the same machine;
+use `0.0.0.0` if Home Assistant connects from another host/container, and restrict
+access with your firewall. Keep the same `data_dir`/`auth_dir` to retain the linked
+WhatsApp session. Never run native and container versions against the same SQLite
+database at the same time.
 
-The file is JSON (not YAML). Keep the same `data_dir` when switching between
+For systemd, see `whatsapp_bridge/whatsapp-bridge.service.example`; it sets
+`CONFIG_FILE` explicitly. The matching sample is
+`whatsapp_bridge/config.native.example.yaml`.
+
 the native binary and the container so the WhatsApp SQLite session remains
 available. Never run both against the same database at the same time.
 
