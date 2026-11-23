@@ -566,3 +566,20 @@ Other integrations by the same author that send their messages through this one:
 ### Support
 
 If this integration saves you some time, you can [support me on Ko-fi](https://ko-fi.com/anonymouse0501). It's entirely optional, and the integration stays free either way.
+
+
+## Release and build workflow
+
+This repository uses the release workflow from `.github/workflows`:
+
+- **CI** runs Go tests, `go vet`, a Go build, a Docker API smoke test, HACS validation and Home Assistant `hassfest` validation.
+- **Native ARM64 test build** can be started manually from Actions → *Build native Linux ARM64 binary*. Leave `release_tag` empty to get a downloadable development artifact. The build runs on a native ARM64 GitHub-hosted runner, keeps CGO enabled for SQLite, and links against musl statically so the binary does not depend on the runner’s glibc version.
+- **Release Please** opens or updates a release PR from Conventional Commits on `main`. Merge the PR to create a GitHub Release.
+- **Published release** builds the ARM64 standalone binary, attaches it with a `.tar.gz` archive and `SHA256SUMS`, and publishes the Docker image to GHCR.
+- Stable releases receive semver tags and `latest`; pre-releases receive their exact version tag and the moving `go-beta` tag.
+
+### One-time GitHub setup
+
+Create a fine-grained PAT or GitHub App token with repository contents (read/write), pull requests (read/write), and issues (read/write) permissions. Save it as the repository Actions secret `RELEASE_PLEASE_TOKEN`. This is needed so the release created by Release Please can trigger the build workflows. Also allow GitHub Actions to write packages for GHCR under Settings → Actions → General if repository policy restricts it.
+
+Use Conventional Commit messages, for example `feat: add delivery receipts`, `fix: reconnect after timeout`, or `docs: clarify pairing setup`.
