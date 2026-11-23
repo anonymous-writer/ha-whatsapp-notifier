@@ -7,6 +7,7 @@ on:
         description: "Optional existing release tag to rebuild and attach to (for example v0.5.2). Leave empty for a test build."
         required: false
         type: string
+
   release:
     types: [published]
 
@@ -17,9 +18,11 @@ jobs:
   test:
     name: Test Go bridge
     runs-on: ubuntu-24.04
+
     defaults:
       run:
         working-directory: whatsapp_bridge
+
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -40,8 +43,9 @@ jobs:
         with:
           go-version-file: whatsapp_bridge/go.mod
           cache: true
+          cache-dependency-path: whatsapp_bridge/go.sum
 
-      - name: Resolve Go modules and generate go.sum
+      - name: Resolve Go modules
         run: go mod tidy
 
       - name: Run tests
@@ -54,9 +58,11 @@ jobs:
     name: Build native Linux AMD64 binary
     needs: test
     runs-on: ubuntu-24.04
+
     defaults:
       run:
         working-directory: whatsapp_bridge
+
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -68,8 +74,9 @@ jobs:
         with:
           go-version-file: whatsapp_bridge/go.mod
           cache: true
+          cache-dependency-path: whatsapp_bridge/go.sum
 
-      - name: Resolve Go modules and generate go.sum
+      - name: Resolve Go modules
         run: go mod tidy
 
       - name: Install static AMD64 C toolchain
@@ -77,22 +84,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes musl-tools
 
-      - name: Build standalone AMD64 binary (native runner, CGO enabled)
+      - name: Build standalone AMD64 binary
         env:
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: "1"
         run: |
           set -euo pipefail
+
           mkdir -p dist
+
           CC=musl-gcc go build -trimpath \
             -ldflags="-s -w -linkmode external -extldflags=-static" \
             -o dist/whatsapp-bridge-linux-amd64 .
+
           if readelf -l dist/whatsapp-bridge-linux-amd64 | grep -q INTERP; then
             echo "::error::The AMD64 binary is not statically linked"
             exit 1
           fi
-          tar -czf dist/whatsapp-bridge-linux-amd64.tar.gz -C dist whatsapp-bridge-linux-amd64
+
+          tar -czf dist/whatsapp-bridge-linux-amd64.tar.gz \
+            -C dist whatsapp-bridge-linux-amd64
 
       - name: Upload standalone AMD64 artifact
         uses: actions/upload-artifact@v7
@@ -108,9 +120,11 @@ jobs:
     name: Build native Linux ARM64 binary
     needs: test
     runs-on: ubuntu-24.04-arm
+
     defaults:
       run:
         working-directory: whatsapp_bridge
+
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -122,8 +136,9 @@ jobs:
         with:
           go-version-file: whatsapp_bridge/go.mod
           cache: true
+          cache-dependency-path: whatsapp_bridge/go.sum
 
-      - name: Resolve Go modules and generate go.sum
+      - name: Resolve Go modules
         run: go mod tidy
 
       - name: Install static ARM64 C toolchain
@@ -131,22 +146,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes musl-tools
 
-      - name: Build standalone ARM64 binary (native runner, CGO enabled)
+      - name: Build standalone ARM64 binary
         env:
           GOOS: linux
           GOARCH: arm64
           CGO_ENABLED: "1"
         run: |
           set -euo pipefail
+
           mkdir -p dist
+
           CC=musl-gcc go build -trimpath \
             -ldflags="-s -w -linkmode external -extldflags=-static" \
             -o dist/whatsapp-bridge-linux-arm64 .
+
           if readelf -l dist/whatsapp-bridge-linux-arm64 | grep -q INTERP; then
             echo "::error::The ARM64 binary is not statically linked"
             exit 1
           fi
-          tar -czf dist/whatsapp-bridge-linux-arm64.tar.gz -C dist whatsapp-bridge-linux-arm64
+
+          tar -czf dist/whatsapp-bridge-linux-arm64.tar.gz \
+            -C dist whatsapp-bridge-linux-arm64
 
       - name: Upload standalone ARM64 artifact
         uses: actions/upload-artifact@v7
@@ -160,11 +180,18 @@ jobs:
 
   publish-release-assets:
     name: Attach AMD64 and ARM64 binaries to GitHub Release
+
     if: github.event_name == 'release' || inputs.release_tag != ''
-    needs: [build-amd64, build-arm64]
-    runs-on: ubuntu-latest
+
+    needs:
+      - build-amd64
+      - build-arm64
+
+    runs-on: ubuntu-24.04
+
     permissions:
       contents: write
+
     steps:
       - name: Download AMD64 artifact
         uses: actions/download-artifact@v8
@@ -180,18 +207,41 @@ jobs:
 
       - name: Generate checksums
         run: |
+          set -euo pipefail
+
           cd dist
-          sha256sum whatsapp-bridge-linux-amd64 whatsapp-bridge-linux-amd64.tar.gz \
-            whatsapp-bridge-linux-arm64 whatsapp-bridge-linux-arm64.tar.gz > SHA256SUMS
+
+          sha256sum \
+            whatsapp-bridge-linux-amd64 \
+            whatsapp-bridge-linux-amd64.tar.gz \
+            whatsapp-bridge-linux-arm64 \
+            whatsapp-bridge-linux-arm64.tar.gz \
+            > SHA256SUMS
+
+      - name: Verify GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY"
 
       - name: Attach binaries and checksums to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
         run: |
+          set -euo pipefail
+
           gh release upload "$RELEASE_TAG" \
             dist/whatsapp-bridge-linux-amd64 \
             dist/whatsapp-bridge-linux-amd64.tar.gz \
             dist/whatsapp-bridge-linux-arm64 \
             dist/whatsapp-bridge-linux-arm64.tar.gz \
-            dist/SHA256SUMS --clobber
+            dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+          echo "Successfully uploaded AMD64 and ARM64 binaries to $RELEASE_TAG"
